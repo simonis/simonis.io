@@ -1,0 +1,1494 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.2.0">Jekyll</generator><link href="/feed.xml" rel="self" type="application/atom+xml" /><link href="/" rel="alternate" type="text/html" /><updated>2021-07-23T14:29:05-05:00</updated><id>/feed.xml</id><title type="html">Volker Simonis</title><subtitle>Musings about OpenJDK and JVM technology.
+</subtitle><author><name>Volker Simonis</name><email>volker.simonis@gmail.com</email></author><entry><title type="html">cl4cds</title><link href="/blog/openjdk/cl4cds.html" rel="alternate" type="text/html" title="cl4cds" /><published>2021-07-23T10:46:43-05:00</published><updated>2021-07-23T10:46:43-05:00</updated><id>/blog/openjdk/cl4cds</id><content type="html" xml:base="/blog/openjdk/cl4cds.html">&lt;div id=&quot;preamble&quot;&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;code&gt;cl4cds&lt;/code&gt; (&lt;a href=&quot;https://github.com/simonis/cl4cds&quot; class=&quot;bare&quot;&gt;https://github.com/simonis/cl4cds&lt;/a&gt;) is a little tool which helps exploring the new Application Class Data Sharing (AppCDS) feature in OpenJDK 10. AppCDS allows sharing of application classes even if they get loaded by a custom class loaders, but unfortunately there&amp;#8217;s currently no default tooling available to make this feature accessible to end users. That&amp;#8217;s where &lt;code&gt;cl4cds&lt;/code&gt; (which is an acronym for &quot;class list for class data sharing&quot;) kicks in. It converts a class list obtained from running your application with &lt;code&gt;-Xlog:class+load=debug&lt;/code&gt; to a format which can be passed to the VM as a parameter of the &lt;code&gt;-XX:SharedClassListFile=&lt;/code&gt; option. This article documents the &lt;code&gt;cl4cds&lt;/code&gt; tool but at the same time also describes the implementation and the benefits of the ovarall CDS/AppCDS features.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;tldr&quot;&gt;TL;DR&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;If you&amp;#8217;re only interested in the &lt;code&gt;cl4cds&lt;/code&gt; utility, you can use it as follows (tested with &lt;a href=&quot;http://openjdk.java.net/projects/jdk/10/&quot;&gt;OpenJDK 10&lt;/a&gt; and &lt;a href=&quot;https://tomcat.apache.org/download-90.cgi&quot;&gt;Tomcat 9&lt;/a&gt;):&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;JAVA_HOME&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;JAVA_10_HOME &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;CATALINA_OPTS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:class+load&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;debug:file&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/tomcat.classtrace &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;CATALINA_HOME/bin/catalina.sh start &lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;CATALINA_HOME/bin/catalina.sh stop &lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;(4)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;JAVA_10_HOME/bin/java io.simonis.cl4cds /tmp/tomcat.classtrace /tmp/tomcat.cls
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;CATALINA_OPTS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;-Xshare:dump -XX:+UseAppCDS -XX:SharedClassListFile=/tmp/tomcat.cls -XX:+UnlockDiagnosticVMOptions -XX:SharedArchiveFile=/tmp/tomcat.jsa&quot;&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;5&quot;&gt;&lt;/i&gt;&lt;b&gt;(5)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;CATALINA_HOME/bin/catalina.sh start &lt;i class=&quot;conum&quot; data-value=&quot;6&quot;&gt;&lt;/i&gt;&lt;b&gt;(6)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;CATALINA_OPTS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;-Xshare:on -XX:+UseAppCDS -XX:+UnlockDiagnosticVMOptions -XX:SharedArchiveFile=/tmp/tomcat.jsa&quot;&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;7&quot;&gt;&lt;/i&gt;&lt;b&gt;(7)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;CATALINA_HOME/bin/catalina.sh start &lt;i class=&quot;conum&quot; data-value=&quot;8&quot;&gt;&lt;/i&gt;&lt;b&gt;(8)&lt;/b&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;AppCDS only works with OpenJDK 10 and higher&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Trace all the classes which get loaded into the file &lt;code&gt;/tmp/tomcat.classtrace&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Start Tomcat and run your application&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;4&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Stop Tomcat&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;5&quot;&gt;&lt;/i&gt;&lt;b&gt;5&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Set the options for creating a shared class archive in &lt;code&gt;/tmp/tomcat.jsa&lt;/code&gt; (&lt;code&gt;-XX:SharedArchiveFile&lt;/code&gt; is a diagnostic option so we have to enable it first by using &lt;code&gt;-XX:+UnlockDiagnosticVMOptions&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;6&quot;&gt;&lt;/i&gt;&lt;b&gt;6&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Restart Tomcat to dump the shared class archive&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;7&quot;&gt;&lt;/i&gt;&lt;b&gt;7&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Set the options for using the shared class archive from &lt;code&gt;/tmp/tomcat.jsa&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;8&quot;&gt;&lt;/i&gt;&lt;b&gt;8&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;From now on, Tomcat will load available classes (both, system and application ones) from the shared archive if available.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The current &lt;code&gt;cl4cds&lt;/code&gt; command line options are as follows:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code&gt;io.simonis.cl4cds [&amp;lt;class-trace-file&amp;gt; [&amp;lt;class-list-file&amp;gt;]]
+
+  &amp;lt;class-trace-file&amp;gt;: class trace obtained by running -Xlog:class+load=debug
+                      if not specified read from &amp;lt;stdin&amp;gt;
+  &amp;lt;class-list-file&amp;gt; : class list which can be passed to -XX:SharedClassListFile
+                      if not specified written to &amp;lt;stdout&amp;gt;
+
+  The following properties can be used to configure cl4cds:
+    -Dio.simonis.cl4cds.debug=true :
+       Print additional tracig to &amp;lt;stderr&amp;gt; (defaults to 'false')
+    -Dio.simonis.cl4cds.dumpFromClassFile=true :
+       Include classes into the output which are loaded from plain classfiles.
+       This is currently not supported by OpenJDK 10 which can only dump
+       classes from .jar files but may change eventually (defaults to 'false')&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;If you&amp;#8217;re interested in the implementation details of CDS/AppCDS, their current limitations and their performance and memory characteristics please read on
+or watch my talk about Class Data Sharing (&lt;a href=&quot;https://video.fosdem.org/2018/UD2.208/class_data_sharing.mp4&quot;&gt;mp4&lt;/a&gt;, &lt;a href=&quot;https://video.fosdem.org/2018/UD2.208/class_data_sharing.webm&quot;&gt;WebM/VP9&lt;/a&gt;, &lt;a href=&quot;https://www.youtube.com/watch?v=erK5r8xpoAQ&quot;&gt;YouTube&lt;/a&gt;) in the &lt;a href=&quot;https://fosdem.org/2018/schedule/event/class_data_sharing&quot;&gt;Free Java DevRoom&lt;/a&gt; at FOSDEM 2018.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;admonitionblock warning&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td class=&quot;icon&quot;&gt;
+&lt;i class=&quot;fa icon-warning&quot; title=&quot;Warning&quot;&gt;&lt;/i&gt;
+&lt;/td&gt;
+&lt;td class=&quot;content&quot;&gt;
+the following is work in progress!
+&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div id=&quot;toc&quot; class=&quot;toc&quot;&gt;
+&lt;div id=&quot;toctitle&quot; class=&quot;title&quot;&gt;Table of Contents&lt;/div&gt;
+&lt;ul class=&quot;sectlevel1&quot;&gt;
+&lt;li&gt;&lt;a href=&quot;#tldr&quot;&gt;TL;DR&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;#class-data-sharing&quot;&gt;Class Data Sharing&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;#using-cds&quot;&gt;Using CDS&lt;/a&gt;
+&lt;ul class=&quot;sectlevel2&quot;&gt;
+&lt;li&gt;&lt;a href=&quot;#cds-performance-benefits&quot;&gt;CDS performance benefits&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;#cds-memory-savings&quot;&gt;CDS memory savings&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;#cds-summary&quot;&gt;CDS summary&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;class-data-sharing&quot;&gt;Class Data Sharing&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Class Data Sharing (CDS) is a feature to improve startup performance and reduce the memory footprint of the HotSpot JVM by storing the preprocessed metadata of system classes to disk and sharing them between virtual machines running on the same host. It was introduced as early as 2004 with the first release of &lt;a href=&quot;https://docs.oracle.com/javase/1.5.0/docs/guide/vm/class-data-sharing.html&quot;&gt;Oracle&amp;#8217;s Java 5 release&lt;/a&gt; and later became available in the first version of OpenJDK (i.e. &lt;a href=&quot;http://hg.openjdk.java.net/jdk6/jdk6&quot;&gt;jdk6&lt;/a&gt;). During the last years, this feature has been constantly extended and improved. Oracle JDK 9 introduced &lt;a href=&quot;https://docs.oracle.com/javase/9/tools/java.htm#JSWOR-GUID-31503FCE-93D0-4175-9B4F-F6A738B2F4C4&quot;&gt;AppCDS&lt;/a&gt; as a commercial feature only, which additionally allows the caching and sharing of application classes, strings and symbols. This commercial feature will be open sourced and made freely available in OpenJDK 10 by &lt;a href=&quot;http://openjdk.java.net/jeps/310&quot;&gt;JEP 310: Application Class-Data Sharing&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Starting with their Java SDK 6.0, IBM also started to support &lt;a href=&quot;https://www.ibm.com/support/knowledgecenter/en/SSYKE2_6.0.0/com.ibm.java.doc.user.lnx.60/user/shc_overview.html&quot;&gt;Class Data Sharing&lt;/a&gt;. They not only supported system class but also classes loaded by the application class loader (a.k.a. system class loader), classes loaded by &lt;a href=&quot;https://www.ibm.com/support/knowledgecenter/SSYKE2_6.0.0/com.ibm.java.doc.user.lnx.60/user/adaptingclassloaders.html?view=kc#adaptingclassloaders&quot;&gt;custom class loaders&lt;/a&gt; and even ahead-of-time (AOT) compiled code (which was not shared between JVMs). While IBM J9&amp;#8217;s CDS addresses similar problems like the HotSpot class data sharing feature in Oracle/OpenJDK, it is technically a completely independent implementation. Although it is much more mature and elaborate compared to the HotSpot implementation, J9&amp;#8217;s CDS hasn&amp;#8217;t attracted that much attention simply because Oracle/OpenJDK has been the predominant JVM in the past decade. But that might change with the open sourcing of the IBM J9 JVM within the &lt;a href=&quot;https://www.eclipse.org/openj9/&quot;&gt;Eclipse OpenJ9&lt;/a&gt; project.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This article will only cover the HotSpot CDS functionality and implementation. If you&amp;#8217;re interested in the J9/OpenJ9 implementation you may have a look at the &lt;a href=&quot;https://www.ibm.com/support/knowledgecenter/en/SSYKE2_9.0.0/com.ibm.java.multiplatform.90.doc/user/classdatasharing.html&quot;&gt;latest documentation&lt;/a&gt;, watch the presentation about &quot;OpenJ9: Under the hood of the next open source JVM&quot; from &lt;a href=&quot;https://www.youtube.com/watch?v=3VporpPlDds&quot;&gt;Geekon 2017 / Krakow&lt;/a&gt; or &lt;a href=&quot;https://www.youtube.com/watch?v=96XoG6xcnys&quot;&gt;Devoxx 2017 / Poland&lt;/a&gt; or simply &lt;a href=&quot;https://adoptopenjdk.net/releases.html?variant=openjdk9-openj9&quot;&gt;download OpenJ9&lt;/a&gt; and run &lt;code&gt;java -Xshareclasses:help&lt;/code&gt; :wink:&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;using-cds&quot;&gt;Using CDS&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;In Oracle J2SE 5.0 the usage of CDS was quite restricted - the feature was only available in the Client VM when running with the Serial GC. Meanwhile, &lt;a href=&quot;https://docs.oracle.com/javase/9/vm/class-data-sharing.htm#JSJVM-GUID-0260F857-A70E-4399-A1DF-A5766BE33285&quot;&gt;Oracle/OpenJDK 9 CDS&lt;/a&gt; also supports the G1, Serial, Parallel, and ParallelOld GCs with the Server VM. The following examples are all based on OpenJDK 9.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Before CDS can be used, the so called &lt;strong&gt;Shared Archive&lt;/strong&gt; has to be created first:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:dump
+&lt;span class=&quot;go&quot;&gt;Allocated shared space: 50577408 bytes at 0x0000000800000000
+Loading classes to share ...
+Loading classes to share: done.
+Rewriting and linking classes ...
+Rewriting and linking classes: done
+Number of classes 1197
+    instance classes   =  1183
+    obj array classes  =     6
+    type array classes =     8
+Updating ConstMethods ... done.
+Removing unshareable information ... done.
+ro space:   5332520 [ 30.5% of total] out of  10485760 bytes [ 50.9% used] at 0x0000000800000000
+rw space:   5630560 [ 32.2% of total] out of  10485760 bytes [ 53.7% used] at 0x0000000800a00000
+md space:     98976 [  0.6% of total] out of   4194304 bytes [  2.4% used] at 0x0000000801400000
+mc space:     34053 [  0.2% of total] out of    122880 bytes [ 27.7% used] at 0x0000000801800000
+st space:     12288 [  0.1% of total] out of     12288 bytes [100.0% used] at 0x00000000fff00000
+od space:   6363752 [ 36.4% of total] out of  20971520 bytes [ 30.3% used] at 0x000000080181e000
+total   :  17472149 [100.0% of total] out of  46272512 bytes [ 37.8% used]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;In this simplest form, the &lt;code&gt;-Xshare:dump&lt;/code&gt; command will use a default class list &lt;code&gt;JAVA_HOME/lib/classlist&lt;/code&gt; which was created at JDK build time and create the shared class archive under &lt;code&gt;JAVA_HOME/lib/server/classes.jsa&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;cd &lt;/span&gt;JAVA_HOME &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;ls&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; lib/classlist lib/server/classes.jsa&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;-rw-rw-r-- 1 simonis    40580 Okt 23 19:06 lib/classlist
+-r--r--r-- 1 simonis 17485824 Dez 30 11:39 lib/server/classes.jsa&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;code&gt;JAVA_HOME/lib/classlist&lt;/code&gt; is a text file which contains the list of classes (one class per line, in &lt;a href=&quot;https://docs.oracle.com/javase/specs/jvms/se9/html/jvms-4.html#jvms-4.2.1&quot;&gt;internal form&lt;/a&gt;) which should be added to the shared class archive:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;head&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-5&lt;/span&gt; JAVA_HOME/lib/classlist
+&lt;span class=&quot;go&quot;&gt;java/lang/Object
+java/lang/String
+java/io/Serializable
+java/lang/Comparable
+java/lang/CharSequence&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As mentioned before, the &lt;code&gt;classlist&lt;/code&gt; file is created at JDK build-time (controlled by the &lt;code&gt;--enable-generate-classlist&lt;/code&gt;/&lt;code&gt;--disable-generate-classlist&lt;/code&gt; flag which defaults to true on platforms which support CDS) by running a simple Java program called &lt;a href=&quot;http://hg.openjdk.java.net/jdk/jdk/file/tip/make/jdk/src/classes/build/tools/classlist/HelloClasslist.java&quot;&gt;&lt;code&gt;HelloClasslist&lt;/code&gt;&lt;/a&gt; (see &lt;a href=&quot;http://hg.openjdk.java.net/jdk/jdk/file/tip/make/GenerateLinkOptData.gmk&quot;&gt;GenerateLinkOptData.gmk&lt;/a&gt;) with the &lt;code&gt;-XX:DumpLoadedClassList=&amp;lt;classlist_file&amp;gt;&lt;/code&gt; option to collect the system classes it uses. Of course, &lt;code&gt;HelloClasslist&lt;/code&gt; is only a simple approximation for the amount of system classes a typical, small Java application will use.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;We can now take a simple &lt;code&gt;HelloCDS&lt;/code&gt; Java program and run it with &lt;code&gt;-Xshare:on&lt;/code&gt; to take advantage of the shared class archive:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight&quot;&gt;&lt;code data-lang=&quot;java&quot;&gt;&lt;span class=&quot;kn&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;io.simonis&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;HelloCDS&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[]&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nc&quot;&gt;System&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;out&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Hello CDS&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;code&gt;-Xshare:on&lt;/code&gt; instructs to VM to use the shared class from the default location at &lt;code&gt;JAVA_HOME/lib/server/classes.jsa&lt;/code&gt;. If the archive hasn&amp;#8217;t been created or is corrupted, the VM will exit with an error:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;rm&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; JAVA_HOME/lib/server/classes.jsa
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on HelloCDS
+&lt;span class=&quot;go&quot;&gt;An error has occurred while processing the shared archive file.
+Specified shared archive not found.
+Error occurred during initialization of VM
+Unable to use shared archive.&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;We could instead use &lt;code&gt;-Xshare:auto&lt;/code&gt; which behaves like &lt;code&gt;-Xshare:on&lt;/code&gt; if the shared archive is available and automatically falls back to &lt;code&gt;-Xshare:off&lt;/code&gt; if the shared archive can not be found or used. After recreating the archive, our program will run just fine, but how can we verify which classes get really loaded right from the shared class archive?&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on HelloCDS
+&lt;span class=&quot;go&quot;&gt;Hello CDS&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Here the class loading log comes in quite handy, because it not only reports which classes are being loaded, but also where they get loaded from in the &lt;code&gt;source:&lt;/code&gt; section:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:class+load io.simonis.HelloCDS
+&lt;span class=&quot;go&quot;&gt;[0.011s][info][class,load] opened: /share/output-jdk9-dev-opt/images/jdk/lib/modules
+[0.024s][info][class,load] java.lang.Object source: shared objects file
+[0.024s][info][class,load] java.io.Serializable source: shared objects file
+[0.024s][info][class,load] java.lang.Comparable source: shared objects file
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;In order to check which classes haven&amp;#8217;t been loaded from the archive, we can grep for all log entries which don&amp;#8217;t contain the term &lt;code&gt;shared objects file&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:class+load HelloCDS | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--invert-match&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;shared objects file&quot;&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;[0.014s][info][class,load] opened: /share/output-jdk9-dev-opt/images/jdk/lib/modules
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;[0,073s][info][class,load] java.util.ImmutableCollections$&lt;/span&gt;ListN &lt;span class=&quot;nb&quot;&gt;source&lt;/span&gt;: jrt:/java.base
+&lt;span class=&quot;gp&quot;&gt;[0,079s][info][class,load] jdk.internal.module.ModuleHashes$&lt;/span&gt;Builder &lt;span class=&quot;nb&quot;&gt;source&lt;/span&gt;: jrt:/java.base
+&lt;span class=&quot;gp&quot;&gt;[0,080s][info][class,load] jdk.internal.module.ModuleHashes$&lt;/span&gt;HashSupplier &lt;span class=&quot;nb&quot;&gt;source&lt;/span&gt;: jrt:/java.base
+&lt;span class=&quot;gp&quot;&gt;[0,080s][info][class,load] jdk.internal.module.SystemModuleFinder$&lt;/span&gt;2 &lt;span class=&quot;nb&quot;&gt;source&lt;/span&gt;: jrt:/java.base
+&lt;span class=&quot;gp&quot;&gt;[0,128s][info][class,load] jdk.internal.loader.URLClassPath$&lt;/span&gt;FileLoader &lt;span class=&quot;nb&quot;&gt;source&lt;/span&gt;: jrt:/java.base
+&lt;span class=&quot;gp&quot;&gt;[0,140s][info][class,load] jdk.internal.loader.URLClassPath$&lt;/span&gt;FileLoader&lt;span class=&quot;nv&quot;&gt;$1&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;source&lt;/span&gt;: jrt:/java.base
+&lt;span class=&quot;go&quot;&gt;[0,149s][info][class,load] io.simonis.HelloCDS source: file:/FOSDEM2018/git/examples/bin/
+Hello CDS&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As we can see, there are just a few classes from the base module which still get loaded directly from the java runtime image (i.e. from the &lt;code&gt;lib/modules&lt;/code&gt; file). Obviously they were not referenced or used by the &lt;code&gt;HelloClasslist&lt;/code&gt; application which was used to generate the default class list under &lt;code&gt;JAVA_HOME/lib/classlist&lt;/code&gt;. But we can of course generate a new, individual class list for our &lt;code&gt;HelloCDS&lt;/code&gt; application, much in the same way the default class list was generated at build time (by using the &lt;code&gt;-XX:DumpLoadedClassList=&amp;lt;classlist_file&amp;gt;&lt;/code&gt; option). Afterwards we use that class list (by using the &lt;code&gt;-XX:SharedClassListFile=&amp;lt;classlist_file&amp;gt;&lt;/code&gt;) to generate a new, application specific shared archive. If we do not explicitly specify the location of the new archive file with the &lt;code&gt;-XX:SharedArchiveFile=&amp;lt;classlist_file&amp;gt;&lt;/code&gt; option (which is a diagnostic option so we need &lt;code&gt;-XX:+UnlockDiagnosticVMOptions&lt;/code&gt; as well) the default archive at &lt;code&gt;JAVA_HOME/lib/server/classes.jsa&lt;/code&gt; will be silently overwritten.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:DumpLoadedClassList&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.cls io.simonis.HelloCDS
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedClassListFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.cls &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.jsa &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:dump
+&lt;span class=&quot;go&quot;&gt;Allocated shared space: 50577408 bytes at 0x0000000800000000
+Loading classes to share ...
+Loading classes to share: done.
+Rewriting and linking classes ...
+Rewriting and linking classes: done
+Number of classes 522 &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+    instance classes   =   508
+    obj array classes  =     6
+    type array classes =     8
+Updating ConstMethods ... done.
+Removing unshareable information ... done.
+ro space:   2498200 [ 31.5% of total] out of  10485760 bytes [ 23.8% used] at 0x0000000800000000
+rw space:   2500208 [ 31.6% of total] out of  10485760 bytes [ 23.8% used] at 0x0000000800a00000
+md space:     68760 [  0.9% of total] out of   4194304 bytes [  1.6% used] at 0x0000000801400000
+mc space:     34053 [  0.4% of total] out of    122880 bytes [ 27.7% used] at 0x0000000801800000
+st space:      8192 [  0.1% of total] out of      8192 bytes [100.0% used] at 0x00000000fff00000
+od space:   2810480 [ 35.5% of total] out of  20971520 bytes [ 13.4% used] at 0x000000080181e000
+total   :   7919893 [100.0% of total] out of  46268416 bytes [ 17.1% used]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;The total number of classes dumped to the shared archive file&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As you can see, the new archive contains fewer classes (522 compared to 1197 before). We can use the new archive by passing it to the VM with the &lt;code&gt;-XX:SharedArchiveFile=&amp;lt;classlist_file&amp;gt;&lt;/code&gt; option:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:class+load &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.jsa io.simonis.HelloCDS | &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--invert-match&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;shared objects file&quot;&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;[0.010s][info][class,load] opened: /share/output-jdk9-dev-opt/images/jdk/lib/modules
+[0,176s][info][class,load] io.simonis.HelloCDS source: file:/FOSDEM2018/git/examples/bin/
+Hello CDS&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This time all the classes except our application class &lt;code&gt;io.simonis.HelloCDS&lt;/code&gt; have been loaded from the shared archive!&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;cds-performance-benefits&quot;&gt;CDS performance benefits&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;So let&amp;#8217;s see if CDS makes any difference if it comes to start-up performance by using the &lt;code&gt;time&lt;/code&gt; utility to measure the elapsed wall clock time (the output below actually shows the average of five runs in a row):&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;%e sec&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:off &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.jsa io.simonis.HelloCDS
+&lt;span class=&quot;go&quot;&gt;Hello CDS
+&lt;mark&gt;0.162 sec&lt;/mark&gt;
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;%e sec&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.jsa io.simonis.HelloCDS
+&lt;span class=&quot;go&quot;&gt;Hello CDS
+&lt;mark&gt;0.148 sec&lt;/mark&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;So it seems like CDS gives us about 9% better performance although we&amp;#8217;ve actually measured the overall execution time here. We can do a little better by measuring the time it needs until our application class gets loaded (again showing the average  of five consecutive runs):&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;%e sec&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:off &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.jsa &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:class+load io.simonis.HelloCDS | &lt;span class=&quot;nb&quot;&gt;grep &lt;/span&gt;HelloCDS
+&lt;span class=&quot;go&quot;&gt;[0,164s][info][class,load] io.simonis.HelloCDS source: file:/FOSDEM2018/git/examples/bin/
+&lt;mark&gt;0.178 sec&lt;/mark&gt;
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;%e sec&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt; java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS.jsa &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:class+load io.simonis.HelloCDS | &lt;span class=&quot;nb&quot;&gt;grep &lt;/span&gt;HelloCDS
+&lt;span class=&quot;go&quot;&gt;[0,143s][info][class,load] io.simonis.HelloCDS source: file:/FOSDEM2018/git/examples/bin/
+&lt;mark&gt;0.160 sec&lt;/mark&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Notice that the overall execution time has slightly increased because of the additional logging but the time until our &lt;code&gt;HelloCDS&lt;/code&gt; class gets loaded is about 13% faster with CDS compared to the default run without CDS.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;cds-memory-savings&quot;&gt;CDS memory savings&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;In order to gather some memory consumption statistics, we slightly extend our example program to read a byte from the standard input stream before exiting:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;java&quot;&gt;&lt;span class=&quot;kn&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;io.simonis&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;HelloCDS2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[]&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;args&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;java&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;io&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;IOException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nc&quot;&gt;System&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;out&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;println&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Hello CDS&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+    &lt;mark&gt;System.in.read();&lt;/mark&gt;
+  &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Now we can use various utilities to compare the consumed memory, but before that we create a new archive for our program:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:DumpLoadedClassList&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.cls io.simonis.HelloCDS2 &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedClassListFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.cls &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:dump &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:off &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xint&lt;/span&gt; io.simonis.HelloCDS2 &lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt; &lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;(4)&lt;/b&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;We create the class list of the loaded system classes..&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;..and dump them to &lt;code&gt;/tmp/HelloCDS2.jsa&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;We run the first test without CDS (i.e. &lt;code&gt;-Xshare:off&lt;/code&gt;) ..&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;4&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;..and in interpreter only mode (i.e. &lt;code&gt;-Xint&lt;/code&gt;) because the JIT compilers will result in slightly different memory consumptions (because of different Code Cache layouts) due to timing variations.&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;First we try with the common Linux system tools like &lt;code&gt;ps&lt;/code&gt;, &lt;code&gt;top&lt;/code&gt; and &lt;code&gt;pmap&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;admonitionblock important&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td class=&quot;icon&quot;&gt;
+&lt;i class=&quot;fa icon-important&quot; title=&quot;Important&quot;&gt;&lt;/i&gt;
+&lt;/td&gt;
+&lt;td class=&quot;content&quot;&gt;
+In order to get comparable results, we have to switch of &lt;em&gt;Address Space Layout Randomization&lt;/em&gt; (ASLR) by executing &lt;code&gt;sudo sh -c &quot;echo 0 &amp;gt; /proc/sys/kernel/randomize_va_space&quot;&lt;/code&gt;.
+&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;top &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; 1 &lt;span class=&quot;nt&quot;&gt;-p&lt;/span&gt; &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;  ...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;  PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+11772 simonis   20   0 4888828  &lt;mark&gt;28032&lt;/mark&gt;  15172 S   0,0  0,3   0:00.18 java
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;ps &lt;span class=&quot;nt&quot;&gt;-o&lt;/span&gt; pid,user,vsize,rss,comm &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;   PID USER        VSZ   RSS COMMAND
+ 11772 simonis  4888828 &lt;mark&gt;28032&lt;/mark&gt; java
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; |  &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;          Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                  4888832 &lt;mark&gt;28484&lt;/mark&gt; 25572         2956            0         12376         13152 KB&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Magical &lt;code&gt;sed&lt;/code&gt; command which outputs the second and the last line of its input&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As we can see, &lt;code&gt;ps&lt;/code&gt; and &lt;code&gt;top&lt;/code&gt; agree on the same values for the mapped virtual memory (i.e. 4888828 KB) and the amount of memory which is really committed to RAM (i.e. the so called &lt;em&gt;Residetn Set Size&lt;/em&gt; or RSS, 28032 KB). &lt;code&gt;pmap&lt;/code&gt; reports slightly higher values (see &lt;a href=&quot;#ps_vs_pmap&quot;&gt;ps man page&lt;/a&gt;) but is known to provide the most accurate information. Moreover, &lt;code&gt;pmap&lt;/code&gt; also details the RSS into shared and private memory which will be important for our further investigations. A description of the various values reported can be found in this nice, graphical &lt;a href=&quot;http://www.software-architect.net/blog/article/date/2015/07/03/cheat-sheet-understanding-the-pmap1-output.html&quot;&gt;pmap cheat sheet&lt;/a&gt; or directly from the &lt;a href=&quot;https://www.kernel.org/doc/Documentation/filesystems/proc.txt&quot;&gt;Linux Kernel &lt;code&gt;proc&lt;/code&gt; file system documentation&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div id=&quot;ps_vs_pmap&quot; class=&quot;quoteblock&quot;&gt;
+&lt;blockquote&gt;
+The SIZE and RSS fields don&amp;#8217;t count some parts of a process including the page tables, kernel stack, struct thread_info, and struct task_struct.  This is usually at least 20 KiB of memory that is always resident.  SIZE is the virtual size of the process (code+data+stack).
+&lt;/blockquote&gt;
+&lt;div class=&quot;attribution&quot;&gt;
+&amp;#8212; Linux man page&lt;br&gt;
+&lt;cite&gt;ps(1)&lt;/cite&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Now we start a second instance of our application to see how the shared memory consumption of the two processes changes:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:off &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xint&lt;/span&gt; io.simonis.HelloCDS2
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2 | &lt;span class=&quot;nb&quot;&gt;head&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; |  &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;         Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                 4888832 &lt;mark&gt;28484&lt;/mark&gt; &lt;mark&gt;19396&lt;/mark&gt;        &lt;mark&gt;15304&lt;/mark&gt;            0            28         13152 KB
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2 | &lt;span class=&quot;nb&quot;&gt;tail&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; |  &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;         Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                 4888832 &lt;mark&gt;28484&lt;/mark&gt; &lt;mark&gt;19396&lt;/mark&gt;        &lt;mark&gt;15304&lt;/mark&gt;            0             0         13180 KB&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Get the &lt;code&gt;pmap&lt;/code&gt; statistics of the first process one more time (assumes that PIDs are assigned incrementally)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Get the &lt;code&gt;pmap&lt;/code&gt; statistics of the second process (assumes that PIDs are assigned incrementally)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After the second instance has been started, neither the virtual nor the committed memory consumption of the first process has changed. Furthermore the second process has the exact same memory footprint like the first one. However, after the start of the second process, we can observe that the amount of shared memory of process one has increased from &lt;code&gt;2956 KB&lt;/code&gt; to &lt;code&gt;15304 KB&lt;/code&gt; which leads to a decrease in the process' &lt;em&gt;Proportional Set Size&lt;/em&gt; (PSS) from &lt;code&gt;25572 KB&lt;/code&gt; down to &lt;code&gt;19396 KB&lt;/code&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;quoteblock&quot;&gt;
+&lt;blockquote&gt;
+The &quot;proportional set size&quot; (PSS) of a process is the count of pages it has in memory, where each page is divided by the number of processes sharing it. So if a process has 1000 pages all to itself, and 1000 shared with one other process, its PSS will be 1500. Note that even a page which is part of a MAP_SHARED mapping, but has only a single pte mapped, i.e.  is currently used by only one process, is accounted as private and not as shared.
+&lt;/blockquote&gt;
+&lt;div class=&quot;attribution&quot;&gt;
+&amp;#8212; www.kernel.org&lt;br&gt;
+&lt;cite&gt;T H E  /proc   F I L E S Y S T E M&lt;/cite&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For the Java VM, the read-only parts of the loaded shared libraries (i.e. &lt;code&gt;libjvm.so&lt;/code&gt;) can be shared between all the VM instances running at the same time. This explains why, taking together, the two VM&amp;#8217;s consume less memory (i.e. have a smaller memory footprint) than the simple sum of their single resident set sizes when running alone. Notice that even a single instance has a PSS value which is smaller than the process' RSS value, because it uses commom shared libraries (e.g. &lt;code&gt;libc.so&lt;/code&gt;) which are already mapped into the memory by other processes.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Now lets see how the situation changes when we use CDS:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xint&lt;/span&gt; io.simonis.HelloCDS2 &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;         Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                 4896596 &lt;mark&gt;32888&lt;/mark&gt; &lt;mark&gt;29991&lt;/mark&gt;         2928            0         18632         11328 KB
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xint&lt;/span&gt; io.simonis.HelloCDS2 &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2 | &lt;span class=&quot;nb&quot;&gt;head&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; |  &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;         Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                 4896596 &lt;mark&gt;32888&lt;/mark&gt; &lt;mark&gt;20672&lt;/mark&gt;        21560            0            32         11296 KB &lt;i class=&quot;conum&quot; data-value=&quot;5&quot;&gt;&lt;/i&gt;&lt;b&gt;(5)&lt;/b&gt;
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2 | &lt;span class=&quot;nb&quot;&gt;tail&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; |  &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;(4)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;         Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                 4896596 &lt;mark&gt;32888&lt;/mark&gt; &lt;mark&gt;20672&lt;/mark&gt;        21560            0            28         11300 KB &lt;i class=&quot;conum&quot; data-value=&quot;6&quot;&gt;&lt;/i&gt;&lt;b&gt;(6)&lt;/b&gt;
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;kill&lt;/span&gt; &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2 | &lt;span class=&quot;nb&quot;&gt;tail&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-1&lt;/span&gt;&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;7&quot;&gt;&lt;/i&gt;&lt;b&gt;(7)&lt;/b&gt;
+&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pgrep &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; HelloCDS2&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt; |  &lt;span class=&quot;nb&quot;&gt;sed&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-n&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'2p;$p'&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;         Address    Size   Rss   Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Mapping
+                 4896596 32888 29991         2928            0         18664         11296 KB &lt;i class=&quot;conum&quot; data-value=&quot;8&quot;&gt;&lt;/i&gt;&lt;b&gt;(8)&lt;/b&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;colist arabic&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Turn on Class Data Sharing (i.e. &lt;code&gt;-Xshare:on&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Now start a second instance of &lt;code&gt;io.simonis.HelloCDS2&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Get the &lt;code&gt;pmap&lt;/code&gt; statistics of the first process one more time&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;4&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Get the &lt;code&gt;pmap&lt;/code&gt; statistics of the second process&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;5&quot;&gt;&lt;/i&gt;&lt;b&gt;5&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;The &lt;code&gt;Size&lt;/code&gt;/&lt;code&gt;RSS&lt;/code&gt; values are still the same, but the amount of shared memory increases from &lt;code&gt;2928 KB&lt;/code&gt; to &lt;code&gt;21560 KB&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;6&quot;&gt;&lt;/i&gt;&lt;b&gt;6&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;The &lt;code&gt;Size&lt;/code&gt;/&lt;code&gt;RSS&lt;/code&gt; values of the second process are exactly the same like for the first process&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;7&quot;&gt;&lt;/i&gt;&lt;b&gt;7&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;Kill the second process..&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;i class=&quot;conum&quot; data-value=&quot;8&quot;&gt;&lt;/i&gt;&lt;b&gt;8&lt;/b&gt;&lt;/td&gt;
+&lt;td&gt;..and run &lt;code&gt;pmap&lt;/code&gt; on the first process one more time (the amount of shared memory drops back to &lt;code&gt;2928 KB&lt;/code&gt;)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The first thing we notice is that both, the RSS (32888 vs. 28484 KB) and the PSS (29991 vs. 25572 KB) values are slightly higher compared to the non-CDS case. On the other hand, the PSS value drops more significantly (from 29991 to 20672 vs. from 25572 to 19396) in the CDS case after we start the second VM. The first observation can be explained by looking at the output of the &lt;code&gt;-Xlog:gc+heap+exit&lt;/code&gt; output which prints some Heap and Metaspace statistics at VM exit:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap+exit &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:off &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xint&lt;/span&gt; io.simonis.HelloCDS2
+&lt;span class=&quot;go&quot;&gt;Hello CDS
+
+[735,797s][info][gc,heap,exit] Heap
+[735,797s][info][gc,heap,exit]  garbage-first heap   total &lt;mark&gt;8192K&lt;/mark&gt;, used 531K [0x0000000083200000, 0x0000000100000000)
+[735,798s][info][gc,heap,exit]   region size 1024K, 1 young (1024K), 0 survivors (0K)
+[735,798s][info][gc,heap,exit]  Metaspace       used &lt;mark&gt;3550K&lt;/mark&gt;, capacity 4486K, committed &lt;mark&gt;4864K&lt;/mark&gt;, reserved 1056768K
+[735,798s][info][gc,heap,exit]   class space    used &lt;mark&gt;312K&lt;/mark&gt;, capacity 386K, committed &lt;mark&gt;512K&lt;/mark&gt;, reserved 1048576K
+
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap+exit &lt;span class=&quot;nt&quot;&gt;-Xshare&lt;/span&gt;:on  &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UnlockDiagnosticVMOptions &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:SharedArchiveFile&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/tmp/HelloCDS2.jsa &lt;span class=&quot;nt&quot;&gt;-Xint&lt;/span&gt; io.simonis.HelloCDS2
+&lt;span class=&quot;go&quot;&gt;Hello CDS
+
+[288,178s][info][gc,heap,exit] Heap
+[288,179s][info][gc,heap,exit]  garbage-first heap   total &lt;mark&gt;10240K&lt;/mark&gt;, used 625K [0x0000000083200000, 0x0000000100000000)
+[288,179s][info][gc,heap,exit]   region size 1024K, 1 young (1024K), 0 survivors (0K)
+[288,179s][info][gc,heap,exit]  Metaspace       used &lt;mark&gt;4K&lt;/mark&gt;, capacity 4486K, committed &lt;mark&gt;4864K&lt;/mark&gt;, reserved 1056768K
+[288,179s][info][gc,heap,exit]   class space    used &lt;mark&gt;3K&lt;/mark&gt;, capacity 386K, committed &lt;mark&gt;512K&lt;/mark&gt;, reserved 1048576K&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;We see that the Java heap usage is about 2 MB higher with CDS (10240 vs. 8192K KB). We also see that in the CDS case we only use 4 KB Meta- and 3 KB Classspace (compared to 3550 and 312 KB in the non-CDS case) because with CDS the classes are used directly from the CDS archive. Unfortunately, the VM still commits the exact same, minimal amount of Meta- and Classspace (4864 and 512 KB).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This observation can be confirmed by looking at the output of the &lt;code&gt;VM.native_memory&lt;/code&gt; diagnostic command which details the various native memory consumers from within the VM if the VM was started with the &lt;code&gt;-XX:NativeMemoryTracking=summary&lt;/code&gt; option:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;cds-summary&quot;&gt;CDS summary&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Finally, it should be mentioned that the each of the various &lt;code&gt;-Xshare&lt;/code&gt; options there exists a corresponding extended &lt;code&gt;-XX:&lt;/code&gt; option as indicated in the following table:&lt;/p&gt;
+&lt;/div&gt;
+&lt;table class=&quot;tableblock frame-all grid-all stripes-even stretch&quot;&gt;
+&lt;colgroup&gt;
+&lt;col style=&quot;width: 50%;&quot;&gt;
+&lt;col style=&quot;width: 50%;&quot;&gt;
+&lt;/colgroup&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th class=&quot;tableblock halign-left valign-top&quot;&gt;Short Form&lt;/th&gt;
+&lt;th class=&quot;tableblock halign-left valign-top&quot;&gt;Long Form&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-Xshare:dump&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-XX:+DumpSharedSpaces&lt;/code&gt; (implies &lt;code&gt;-Xint&lt;/code&gt;)&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-Xshare:on&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-XX:+UseSharedSpaces&lt;/code&gt; &lt;code&gt;-XX:+RequireSharedSpaces&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-Xshare:auto&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-XX:+UseSharedSpaces&lt;/code&gt; &lt;code&gt;-XX:-RequireSharedSpaces&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-Xshare:off&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;-XX:-UseSharedSpaces&lt;/code&gt; &lt;code&gt;-XX:-RequireSharedSpaces&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;div class=&quot;sect3&quot;&gt;
+&lt;h4 id=&quot;colophon&quot;&gt;Colophon&lt;/h4&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Rendered with AsciiDoctor 2.0.15 and Jekyll 4.2.0&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;</content><author><name>Volker Simonis</name></author><category term="openjdk" /></entry><entry><title type="html">The Memory Layout of a 64-bit Linux Process</title><link href="/blog/linux/LinuxProcessLayout.html" rel="alternate" type="text/html" title="The Memory Layout of a 64-bit Linux Process" /><published>2021-07-23T10:46:29-05:00</published><updated>2021-07-23T10:46:29-05:00</updated><id>/blog/linux/LinuxProcessLayout</id><content type="html" xml:base="/blog/linux/LinuxProcessLayout.html">&lt;div id=&quot;preamble&quot;&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This is a tiny writeup (mostly for me such that I don&amp;#8217;t forget about it :) how a simple, 64-bit Linux process is laid out in memory and how a processes memory consumption can be analyzed. A future article will then focus on the native memory layout and consumption of a Java process.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;the-basics&quot;&gt;The basics&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The precesses memory space layout is platform specific. On current x86_64 CPU&amp;#8217;s the memory will be laid out according to &quot;virtual memory map with 4 level page tables&quot; which is specified in the Linux kernel documentation under &lt;a href=&quot;https://www.kernel.org/doc/Documentation/x86/x86_64/mm.txt&quot;&gt;&lt;code&gt;Documentation/x86/x86_64/mm.txt&lt;/code&gt;&lt;/a&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code&gt;0000000000000000 - 00007fffffffffff (=47 bits) user space, different per mm
+                                               hole caused by [47:63] sign extension
+ffff800000000000 - ffff87ffffffffff (=43 bits) guard hole, reserved for hypervisor
+ffff880000000000 - ffffc7ffffffffff (=64 TB)   direct mapping of all phys. memory &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+...
+ffffffffff600000 - ffffffffff600fff (=4 kB)    legacy vsyscall ABI
+ffffffffffe00000 - ffffffffffffffff (=2 MB)    unused hole&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As you can see, this gives us a virtual address space of 48 bits where 47 bits can be used for user space programs, to address at most 128 TB of memory. Because this article focuses on the user space, I&amp;#8217;ve omitted most of the predefined kernel space regions. It&amp;#8217;s just interesting to see &amp;#x278a;, that the kernel maps the complete physical memory into the kernel address space for convenience. Notice, that current x86_64 CPUs can only address a maximum of 64 TB because they &lt;a href=&quot;https://software.intel.com/sites/default/files/managed/2b/80/5-level_paging_white_paper.pdf#G6.1034961&quot;&gt;limit the physical addresses to 46 bits&lt;/a&gt; (i.e. a program can use a virtual address space of 128 TB but only 64 TB out of the 128 can be physically mapped). Future versions of x86_64 CPUs will be able to use 57 bits for the virtual address space (resulting in a 56 bits or 128 PiB user space) and up to &lt;a href=&quot;https://software.intel.com/sites/default/files/managed/2b/80/5-level_paging_white_paper.pdf#G6.1034961&quot;&gt;52 bits for physical addresses&lt;/a&gt; (resulting in up to 4 PiB of physical memory). This new hardware generation requires an extended, &lt;a href=&quot;https://lwn.net/Articles/717293/&quot;&gt;5-level page table&lt;/a&gt; as described in Intel&amp;#8217;s &lt;a href=&quot;https://software.intel.com/sites/default/files/managed/2b/80/5-level_paging_white_paper.pdf&quot;&gt;&quot;5-Level Paging and 5-Level EPT&quot;&lt;/a&gt; white paper and recently implemented in the Linux &lt;a href=&quot;https://lwn.net/Articles/716916/&quot;&gt;4.12 kernel&lt;/a&gt;. The resulting, new virtual memory map is described in the previously mentioned &lt;a href=&quot;https://www.kernel.org/doc/Documentation/x86/x86_64/mm.txt&quot;&gt;&lt;code&gt;mm.txt&lt;/code&gt;&lt;/a&gt; kernel documentation file as well.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;hello-world&quot;&gt;Hello world&amp;#8230;&amp;#8203;&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As a baseline example we take a slightly modified &quot;Hello world&quot; example as shown in Listing &lt;a href=&quot;#Hello_world&quot;&gt;Listing 1&lt;/a&gt;. We simply add a call to &lt;code&gt;getchar()&lt;/code&gt; at the end of the program &amp;#x278a; such that we can easily analyze its memory layout.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div id=&quot;Hello_world&quot; class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;Listing 1. The famous &quot;Hello world example&quot;&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;c&quot;&gt;&lt;span class=&quot;cp&quot;&gt;#include &amp;lt;stdio.h&amp;gt;
+&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;argc&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;char&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;argv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;printf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Hello world&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;getchar&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt; &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As demonstrated in Listing &lt;a href=&quot;#Hello_world_pmap&quot;&gt;Listing 2&lt;/a&gt;, we will use the &lt;a href=&quot;http://man7.org/linux/man-pages/man1/pmap.1.html&quot;&gt;&lt;code&gt;pmap&lt;/code&gt;&lt;/a&gt; utility to display the memory layout of a process. &lt;code&gt;pmap&lt;/code&gt; is actually just a front-end for the memory map of a process as recorded in the &lt;code&gt;smaps&lt;/code&gt; file of the &lt;a href=&quot;http://man7.org/linux/man-pages/man5/proc.5.html&quot;&gt;&lt;code&gt;proc file system&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div id=&quot;Hello_world_pmap&quot; class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;Listing 2. The memory layout of our &quot;Hello world&quot; example&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;nt&quot;&gt;-X&lt;/span&gt; &lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;pidof hello&lt;span class=&quot;sb&quot;&gt;`&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;14792:   ./examples/c/hello
+         Address Perm   Offset Device Inode Size  Rss Pss Referenced Anonymous Swap Locked Mapping
+        00400000 r-xp 00000000  00:26  2118    4    4   4          4         0    0      0 hello
+        00600000 r--p 00000000  00:26  2118    4    4   4          4         4    0      0 hello
+        00601000 rw-p 00001000  00:26  2118    4    4   4          4         4    0      0 hello
+    7ffff7a11000 r-xp 00000000  08:01  8106 1784  952   5        952         0    0      0 libc-2.19.so
+    7ffff7bcf000 ---p 001be000  08:01  8106 2048    0   0          0         0    0      0 libc-2.19.so
+    7ffff7dcf000 r--p 001be000  08:01  8106   16   16  16         16        16    0      0 libc-2.19.so
+    7ffff7dd3000 rw-p 001c2000  08:01  8106    8    8   8          8         8    0      0 libc-2.19.so
+    7ffff7dd5000 rw-p 00000000  00:00     0   20   12  12         12        12    0      0
+    7ffff7dda000 r-xp 00000000  08:01  8176  140  140   0        140         0    0      0 ld-2.19.so
+    7ffff7fdd000 rw-p 00000000  00:00     0   12   12  12         12        12    0      0
+    7ffff7ff4000 rw-p 00000000  00:00     0   16   12  12         12        12    0      0
+    7ffff7ff8000 r--p 00000000  00:00     0    8    0   0          0         0    0      0 [vvar]              &lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;(4)&lt;/b&gt;
+    7ffff7ffa000 r-xp 00000000  00:00     0    8    4   0          4         0    0      0 [vdso]              &lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
+    7ffff7ffc000 r--p 00022000  08:01  8176    4    4   4          4         4    0      0 ld-2.19.so
+    7ffff7ffd000 rw-p 00023000  08:01  8176    4    4   4          4         4    0      0 ld-2.19.so
+    7ffff7ffe000 rw-p 00000000  00:00     0    4    4   4          4         4    0      0
+    7ffffffde000 rw-p 00000000  00:00     0  136    8   8          8         8    0      0 [stack]
+    7ffffffff000 ---p 00000000  00:00     0    1    0   0          0         0    0      0 [kernel-guard-page] &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+ffffffffff600000 r-xp 00000000  00:00     0    4    0   0          0         0    0      0 [vsyscall]          &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+                                            ==== ==== === ========== ========= ==== ======
+                                            4224 1188  97       1188        88    0      0 KB&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;If called only with a PID argument, the output of &lt;code&gt;pmap&lt;/code&gt; will be more compact and only contain the &lt;em&gt;Address&lt;/em&gt;, &lt;em&gt;Perm&lt;/em&gt;, &lt;em&gt;Size&lt;/em&gt; and &lt;em&gt;Mapping&lt;/em&gt; columns. If called with &lt;code&gt;-X&lt;/code&gt; or &lt;code&gt;-XX&lt;/code&gt;, it will display more of / all off the information exposed by the kernel through &lt;code&gt;/proc/PID/smaps&lt;/code&gt;. This content may vary across kernel versions. In our concrete example (with &lt;code&gt;-X&lt;/code&gt;) the &lt;em&gt;Address&lt;/em&gt; column contains the start address of a mapping. &lt;em&gt;Perm&lt;/em&gt; displays the permission bits (&lt;code&gt;r&lt;/code&gt; = read, &lt;code&gt;w&lt;/code&gt; = write, &lt;code&gt;x&lt;/code&gt; = execute, &lt;code&gt;p&lt;/code&gt;/&lt;code&gt;s&lt;/code&gt; = private/shared mapping). &lt;em&gt;Offset&lt;/em&gt; contains the offset into the mapped file and will be zero for all non-file (i.e. &lt;em&gt;anonymous&lt;/em&gt; mappings). The same holds true for the &lt;em&gt;Device&lt;/em&gt; and &lt;em&gt;Inode&lt;/em&gt; columns which are relevant for file mappings only. The &lt;em&gt;Size&lt;/em&gt; column contains the size of the memory mapping in kilobytes (notice however that the kernel can only map memory in chunks which are a multiple of the &quot;kernel page size&quot; - normally 4 KB on x86). The &lt;em&gt;RSS&lt;/em&gt; (&quot;Resident Set Size&quot;) column displays the amount of memory which is actually in RAM while the &lt;em&gt;PSS&lt;/em&gt; (&lt;a href=&quot;https://lwn.net/Articles/230975/&quot;&gt;&quot;Proportional Set Size&quot;&lt;/a&gt;) column is the amount of memory in RAM divided by the number of processes sharing it.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As you can see, all the lines excluding the last one describe memory regions in user space. Notice that the last page of the user space (i.e. &lt;code&gt;0x7ffffffff000-0x7ffffffff000&lt;/code&gt; &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/code&gt;) will not be displayed by &lt;code&gt;pmap&lt;/code&gt; nor is it recorded in the corresponding &lt;code&gt;/proc/&amp;lt;pid&amp;gt;/smaps&lt;/code&gt; file. As &lt;a href=&quot;https://github.com/torvalds/linux/blob/b18cb64ead400c01bf1580eeba330ace51f8087d/arch/x86/include/asm/processor.h#L757&quot;&gt;described in the kernel sources&lt;/a&gt;, this special guard page (i.e. 4 KB) is an implementation detail only required on x86_64 CPUs (and included here for completeness).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The last line (i.e. &lt;code&gt;0xffffffffff600000&amp;#8230;&amp;#8203;[vsyscall]&lt;/code&gt; &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/code&gt;) refers to a 4 KB page in the kernel space which has been mapped into the user space. It is relict of an early and now deprecated implementation of so called &lt;a href=&quot;https://lwn.net/Articles/446528/&quot;&gt;&quot;virtual system calls&quot;&lt;/a&gt;. Virtual system calls are used to speed up the implementation of certain system calls like &lt;a href=&quot;http://man7.org/linux/man-pages/man5/gettimeofday.5.html&quot;&gt;&lt;code&gt;gettimeofday()&lt;/code&gt;&lt;/a&gt; which only need read access to certain kernel variables. The idea is to implement these system calls such that they don&amp;#8217;t switch into kernel mode because the kernel maps the required data read-only into the user space memory. This is exactly what the &lt;code&gt;[vsyscall]&lt;/code&gt; mapping is used for: it contains the code and the variables for the mentioned virtual system calls.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Unfortunately the size of the &lt;code&gt;[vsyscall]&lt;/code&gt; region is restricted to 4 KB and it&amp;#8217;s location is fixed which is considered an unnecessarily security risk in the meantime. The &lt;code&gt;vsyscall&lt;/code&gt; implementation has therefore been deprecated in favour of the new &lt;a href=&quot;https://lwn.net/Articles/615809/&quot;&gt;&lt;code&gt;vDSO&lt;/code&gt;&lt;/a&gt; (i.e. &quot;virtual Dynamic Shared Object&quot;) implementation. This is a small shared library which is exported by the kernel (see &lt;a href=&quot;http://man7.org/linux/man-pages/man7/vdso.7.html&quot;&gt;&lt;code&gt;vdso(7)&lt;/code&gt;&lt;/a&gt;) and mapped into the user address space &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/code&gt;. With &lt;code&gt;vDSO&lt;/code&gt; the kernel variables are mapped into an extra, read-only memory region called &lt;code&gt;[vvar]&lt;/code&gt; &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;4&quot;&gt;&lt;/i&gt;&lt;b&gt;4&lt;/b&gt;&lt;/code&gt;. Both these regions have no size limitations and are subject to ASLR.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;admonitionblock important&quot;&gt;
+&lt;table&gt;
+&lt;tr&gt;
+&lt;td class=&quot;icon&quot;&gt;
+&lt;i class=&quot;fa icon-important&quot; title=&quot;Important&quot;&gt;&lt;/i&gt;
+&lt;/td&gt;
+&lt;td class=&quot;content&quot;&gt;
+In order to get comparable results, we have to switch off &lt;em&gt;Address Space Layout Randomization&lt;/em&gt; (&lt;a href=&quot;https://en.wikipedia.org/wiki/Address_space_layout_randomization&quot;&gt;ASLR&lt;/a&gt;) by executing &lt;code&gt;sudo sh -c &quot;echo 0 &amp;gt; /proc/sys/kernel/randomize_va_space&quot;&lt;/code&gt;. ASLR was added to the Linux kernel back in &lt;a href=&quot;https://lwn.net/Articles/121845/&quot;&gt;version 2.6&lt;/a&gt;. It is a technique for hardening the OS against various attacks (i.e. the &lt;a href=&quot;https://en.wikipedia.org/wiki/Return-to-libc_attack&quot;&gt;&quot;return to libc attack&quot;&lt;/a&gt;) which exploit memory corruption vulnerabilities in order to jump to well known code in the users address space. Randomizing the address where shared libraries, stacks, the heap and even the executable itself (if compiled with &lt;code&gt;-fPIE&lt;/code&gt; and linked with &lt;code&gt;-pie&lt;/code&gt;) are being loaded, makes it much more harder to effectively execute such attacks. But for our analysis, as well as during development (e.g. debugging) it is of course much more convenient, if the addresses of an executable remain constant across different runs.
+&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;rss&quot;&gt;RSS&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Files are read by the Linux kernel with a certain read-ahead which is device dependent and which can be configured with the &lt;a href=&quot;http://man7.org/linux/man-pages/man5/blockdev.8.html&quot;&gt;&lt;code&gt;blockdev(8)&lt;/code&gt;&lt;/a&gt; command.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div id=&quot;blockdev&quot; class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;title&quot;&gt;Listing 3. Query the kernel and file system read-ahead with &lt;code&gt;blockdev&lt;/code&gt;&lt;/div&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;sudo &lt;/span&gt;blockdev &lt;span class=&quot;nt&quot;&gt;--getra&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--getfra&lt;/span&gt; /dev/sda1
+&lt;span class=&quot;go&quot;&gt;256
+256&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;According to the man page, the output is in 512-byte sectors so a value of 256 means a read-ahead of 128 KB.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;where-it-all-starts&quot;&gt;Where it all starts&amp;#8230;&amp;#8203;&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Let&amp;#8217;s now start our journey with the execution of the standard C-library function &lt;a href=&quot;http://pubs.opengroup.org/onlinepubs/9699919799/functions/exec.html&quot;&gt;&lt;code&gt;execve()&lt;/code&gt;&lt;/a&gt; which in turn executes the &lt;a href=&quot;https://elixir.bootlin.com/linux/v4.18.5/source/fs/exec.c#L1963&quot;&gt;&lt;code&gt;execve&lt;/code&gt; system call&lt;/a&gt;. &lt;code&gt;execve&lt;/code&gt; is usually called right after &lt;code&gt;fork()&lt;/code&gt; and replaces (i.e. overlays) the old programs stack, heap and data segments with the ones of the new program (&lt;a href=&quot;http://man7.org/linux/man-pages/man2/execve.2.html&quot;&gt;see the man page of &lt;code&gt;execve(2)&lt;/code&gt;&lt;/a&gt;).&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;</content><author><name>Volker Simonis</name></author><category term="linux" /></entry><entry><title type="html">Releases unused heap memory back to the OS or How to make sense of all these numbers</title><link href="/blog/openjdk/uncommit.html" rel="alternate" type="text/html" title="Releases unused heap memory back to the OS or How to make sense of all these numbers" /><published>2021-07-15T00:00:00-05:00</published><updated>2021-07-15T00:00:00-05:00</updated><id>/blog/openjdk/uncommit</id><content type="html" xml:base="/blog/openjdk/uncommit.html">&lt;div id=&quot;preamble&quot;&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The JVM has the ability to release unused heap memory back to the operating system. The exact details on how and when this happens depend on the selected garbage collection algorithm and can be controlled by various command line option. This blog explains how exactly releasing of memory works for SerialGC and explores the corresponding options. With the help of the built-in JVM supportability and logging facilities as well as with the help of native OS tools we will verify that the amount of virtual, committed and dirty memory of the JVM process behaves as expected.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;heap-basics&quot;&gt;Heap basics&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;At startup the JVM determines values for the &lt;code&gt;InitialHeapSize&lt;/code&gt; and &lt;code&gt;MaxHeapSize&lt;/code&gt; based on the amount of system memory. These values can be inspected with &lt;code&gt;-XX:+PrintFlagsFinal&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+PrintFlagsFinal &lt;span class=&quot;nt&quot;&gt;-version&lt;/span&gt; | egrep &lt;span class=&quot;s1&quot;&gt;'(InitialHeapSize|MaxHeapSize)'&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;   size_t InitialHeapSize           = 524288000                  {product} {ergonomic}&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;   size_t MaxHeapSize               = 8380219392                 {product} {ergonomic}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;They can be overridden on the command line. If we want to start with 100m initial heap and not grow beyond 1g we can specify the following options:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+PrintFlagsFinal &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;100m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-version&lt;/span&gt; | egrep &lt;span class=&quot;s1&quot;&gt;'(InitialHeapSize|MaxHeapSize)'&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;   size_t InitialHeapSize           = 104857600                  {product} {command line}&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;   size_t MaxHeapSize               = 1073741824                 {product} {command line}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The JVM also has the notion of a minimum heap size which can be set with the &lt;code&gt;-Xms&lt;/code&gt; command line option. &lt;code&gt;-Xms&lt;/code&gt; will actually set both, the minimum and the initial heap size to the same value. But is also has some peculiarities: if you set both &lt;code&gt;-Xms&lt;/code&gt; and &lt;code&gt;-XX:InitialHeapSize&lt;/code&gt; and &lt;code&gt;-Xms&lt;/code&gt; comes first on the command line than &lt;code&gt;sXms&lt;/code&gt; will set the minimum and &lt;code&gt;-XX:InitialHeapSize&lt;/code&gt; the initial heap size. If &lt;code&gt;-Xms&lt;/code&gt; comes second, it will set both, the minimum and the initial heap size to the same value and override the effect of the &lt;code&gt;-XX:InitialHeapSize&lt;/code&gt; option. To overcome this situation and make it possible to reliably and independently set both, the minimum and the initial heap size, jdk13 has introduced the new &lt;code&gt;-XX:MinHeapSize&lt;/code&gt; flag (see &lt;a href=&quot;https://bugs.openjdk.java.net/browse/JDK-8223837&quot;&gt;JDK-8223837: Add -XX:MinHeapSize flag to set the minimum heap size&lt;/a&gt;).&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;serial-gc&quot;&gt;Serial GC&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For SerialGC, &lt;code&gt;InitialHeapSize&lt;/code&gt; and &lt;code&gt;MaxHeapSize&lt;/code&gt; determine the overall size of the heap (setting &lt;code&gt;-Xms&lt;/code&gt; to a lower value than &lt;code&gt;InitialHeapSize&lt;/code&gt; has no effect for SerialGC because the heap will never shrink below &lt;code&gt;InitialHeapSize&lt;/code&gt;). The &lt;a href=&quot;https://docs.oracle.com/en/java/javase/11/gctuning/factors-affecting-garbage-collection-performance.html&quot;&gt;SerialGC heap&lt;/a&gt; is subdivided in the New (aka. Young) and the Old (aka. &quot;Tenured&quot;) generation. The New generation is further subdivided into the three Eden, From and To spaces. We can see these spaces for each GC cycle when we enable GC logging with &lt;code&gt;-Xlog:gc+heap&lt;/code&gt;. For the remainder of this blog we will use the simple &lt;a href=&quot;https://github.com/simonis/Memory/blob/master/examples/java/Uncommit.java&quot;&gt;&lt;code&gt;Uncommit.java&lt;/code&gt;&lt;/a&gt; example program which first allocates a configurable amount of data and then calls &lt;code&gt;System.gc()&lt;/code&gt; several times after the data has been freed. It also calls &lt;code&gt;System.gc()&lt;/code&gt; right after invoking the &lt;code&gt;main()&lt;/code&gt; function, to get a baseline for our application:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;mark&gt;100m&lt;/mark&gt; &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Calling System.gc()&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0) Heap before GC invocations=0 (full 0):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  def new generation   total &lt;mark&gt;30720K&lt;/mark&gt;, used 2733K [&lt;mark class=&quot;level1&quot;&gt;0x00000000c0000000&lt;/mark&gt;, &lt;mark class=&quot;level1&quot;&gt;0x00000000c2150000&lt;/mark&gt;, &lt;mark class=&quot;level2&quot;&gt;0x00000000d5550000&lt;/mark&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   eden space &lt;mark&gt;27328K&lt;/mark&gt;,  10% used [0x00000000c0000000, 0x00000000c02ab448, 0x00000000c1ab0000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   from space &lt;mark&gt;3392K&lt;/mark&gt;,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  tenured generation   total &lt;mark&gt;68288K&lt;/mark&gt;, used 0K [&lt;mark class=&quot;level2&quot;&gt;0x00000000d5550000&lt;/mark&gt;, &lt;mark class=&quot;level2&quot;&gt;0x00000000d9800000&lt;/mark&gt;, &lt;mark class=&quot;level2&quot;&gt;0x0000000100000000&lt;/mark&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)    the space 68288K,   0% used [0x00000000d5550000, 0x00000000d5550000, 0x00000000d5550200, 0x00000000d9800000)&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Before this very first GC Eden and From sum up to New (i.e. &lt;mark&gt;27328k&lt;/mark&gt; + &lt;mark&gt;3392k&lt;/mark&gt; == &lt;mark&gt;30720k&lt;/mark&gt;) and New plus Tenured plus To sum up to InitialHeapSize (i.e. &lt;mark&gt;30720k&lt;/mark&gt; + &lt;mark&gt;68288k&lt;/mark&gt; + 3392k == 102400k == &lt;mark&gt;100m&lt;/mark&gt;). Notice how the size of New is given as 30720 which only includes Eden and From because out of From and To only one will be active at any given time. In reality, New occupies 34112k (i.e. Eden + From + To) and this can be easily computed from (&lt;mark class=&quot;level1&quot;&gt;0x00000000c2150000&lt;/mark&gt; - &lt;mark class=&quot;level1&quot;&gt;0x00000000c0000000&lt;/mark&gt;) / 1024. 0x00000000c0000000 is the starting address of New and 0x00000000c2150000 is the end address of its currently active part (i.e. the initially committed part). The maximum reserved size of New is 349504k and it goes from 0x00000000c0000000 to 0x00000000d5550000.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For Tenured, the currently active (i.e. committed) part has a size of 68288K (from &lt;mark class=&quot;level2&quot;&gt;0x00000000d5550000&lt;/mark&gt; to &lt;mark class=&quot;level2&quot;&gt;0x00000000d9800000&lt;/mark&gt;) while its reserved size (i.e. 699072k) starts at 0x00000000d5550000 and ends at &lt;mark class=&quot;level2&quot;&gt;0x0000000100000000&lt;/mark&gt;. The reserved sizes for New and Tenured sum up to MaxHeapSize (i.e. 349504k + 699072k == 1048576k == 1g).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;New occupies ~33% (i.e. 349504k / 1048576k == 0.33) and Tenured ~66% (i.e. 699072k / 1048576k == 0.66) of the total reserved heap which corresponds to an Old/New ratio of 2 as specified by the default value for &lt;code&gt;-XX:NewRatio&lt;/code&gt;. This is also the ratio of the initially committed parts of New and Tenured (i.e. &lt;mark&gt;34112k&lt;/mark&gt; / 102400k == 0.33 for New and &lt;mark&gt;68288k&lt;/mark&gt; / 102400k == 0.66 for Tenured).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;GC(0) New generation size &lt;mark&gt;34112K&lt;/mark&gt;-&amp;gt;34176K [eden=27392K,survivor=3392K]
+GC(0)   [&lt;mark class=&quot;level1&quot;&gt;allowed 5K extra for 1 threads&lt;/mark&gt;]
+GC(0) DefNew: 2733K(30720K)-&amp;gt;0K(30784K) Eden: 2733K(27328K)-&amp;gt;0K(27392K) From: 0K(3392K)-&amp;gt;0K(3392K)
+GC(0) Tenured: 0K(&lt;mark&gt;68288K&lt;/mark&gt;)-&amp;gt;689K(68288K)
+GC(0) Heap after GC invocations=1 (full 1):
+GC(0)  def new generation   total 30784K, used 0K [0x00000000c0000000, 0x00000000c2160000, 0x00000000d5550000)
+GC(0)   eden space 27392K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ac0000)
+GC(0)   from space 3392K,   0% used [0x00000000c1ac0000, 0x00000000c1ac0000, 0x00000000c1e10000)
+GC(0)   to   space 3392K,   0% used [0x00000000c1e10000, 0x00000000c1e10000, 0x00000000c2160000)
+GC(0)  tenured generation   total 68288K, used 689K [0x00000000d5550000, 0x00000000d9800000, 0x0000000100000000)
+GC(0)    the space 68288K,   1% used [0x00000000d5550000, 0x00000000d55fc4c0, 0x00000000d55fc600, 0x00000000d9800000)
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As you can see, after the first full GC, the size of New will be adjusted to accommodate the number of Java threads (1 in our case). Notice that as of the writing of this blog, a stock OpenJDK will always prints &lt;code&gt;&lt;mark class=&quot;level1&quot;&gt;&quot;allow 0k extra for 0 threads&quot;&lt;/mark&gt;&lt;/code&gt;. This logging error will be fixed by &lt;a href=&quot;https://bugs.openjdk.java.net/browse/JDK-8270100&quot;&gt;JDK-8270100&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;To simplify further analysis we can disable this resizing by setting &lt;code&gt;-XX:NewSizeThreadIncrease&lt;/code&gt; to 0. We also set &lt;code&gt;-XX:NativeMemoryTracking=summary&lt;/code&gt; so we can use &lt;a href=&quot;https://docs.oracle.com/en/java/javase/11/vm/native-memory-tracking.html&quot;&gt;Native Memory Tracking&lt;/a&gt; (NMT) to verify the GC log output:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;100m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NewSizeThreadIncrease&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NativeMemoryTracking&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;summary Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0) DefNew: 2733K(30720K)-&amp;gt;0K(30720K) Eden: 2733K(27328K)-&amp;gt;0K(27328K) From: 0K(3392K)-&amp;gt;0K(3392K)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0) Tenured: 0K(68288K)-&amp;gt;733K(68288K)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0) Heap after GC invocations=1 (full 1):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  tenured generation   total 68288K, used 733K [0x00000000d5550000, 0x00000000d9800000, 0x0000000100000000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)    the space 68288K,   1% used [0x00000000d5550000, 0x00000000d56074d0, 0x00000000d5607600, 0x00000000d9800000)&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;&lt;mark&gt;VmRSS:	   40772 kB&lt;/mark&gt;&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;Press &amp;lt;Enter&amp;gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Every time after the application calls &lt;code&gt;System.gc()&lt;/code&gt; it will report the amount of memory it consumes as &lt;mark&gt;`VmRSS`&lt;/mark&gt; (based on data gathered from &lt;code&gt;/proc/self/status&lt;/code&gt;) and wait for user input in order to give us a chance to analyze it with external tools. The NMT information for our application confirms the reserved (i.e.&lt;mark&gt;1048576k&lt;/mark&gt; == 1g) and committed (i.e. &lt;mark&gt;102400k&lt;/mark&gt; == 100m) heap sizes we&amp;#8217;ve calculated from the GC log before:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;jcmd Uncommit VM.native_memory
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;-                 Java Heap (reserved=&lt;mark&gt;1048576KB&lt;/mark&gt;, committed=&lt;mark&gt;102400KB&lt;/mark&gt;)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;                            (mmap: reserved=1048576KB, committed=102400KB)&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;But unfortunately, on Linux &quot;committed&quot; doesn&amp;#8217;t mean that a memory segment is backed up by real, physical memory until each of its pages was touched (i.e. written to) for the first time. This means that the corresponding pages won&amp;#8217;t show up in the so called &quot;resident set&quot; (i.e. RSS) of the process until they get touched. We can verify this with &lt;code&gt;pmap&lt;/code&gt; command:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;pmap &lt;span class=&quot;nt&quot;&gt;-x&lt;/span&gt; 17126
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;00000000c0000000   34112    1408    1408 rw---   [ anon ]    &lt;/span&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;00000000c2150000  315392       0       0 -----   [ anon ]    &lt;/span&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;00000000d5550000   68288     736     736 rw---   [ anon ]    &lt;/span&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;00000000d9800000  630784       0       0 -----   [ anon ]    &lt;/span&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
+&lt;span class=&quot;go&quot;&gt;0000000800000000      12      12      12 rwx-- classes.jsa&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;0000000800003000    4348    4052    3140 rw--- classes.jsa&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;0000000800442000    7956    7632       0 r---- classes.jsa&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;---------------- ------- ------- -------&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;total kB         3470076   41820   14000&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&quot;rw&quot; (i.e. read/write) mode means that the corresponding mapping has been committed while an empty mode indicates a virtual memory mapping which has only been reserved but not yet committed. &quot;RSS&quot; (i.e. resident set size) denotes the part of the corresponding mapping which is actually present in physical memory. If a virtual memory mapping is backed up by a file, the &quot;Mapping&quot; section contains the file name (e.g. &lt;code&gt;classes.jsa&lt;/code&gt; for the CDS, i.e. class data sharing archive). For the Java heap &lt;code&gt;[ anon ]&lt;/code&gt; indicates that it is an anonymous mapping. Finally, the &quot;Dirty&quot; column prints the amount of memory which has been changed with respect to the primary source of the mapping. For anonymous mappings like the Java heap, RSS is equal to Dirty but for file mappings like the CDS archive we can see that for writable sections some parts might still correspond to the original data in the file and Dirty &amp;lt;= RSS &amp;lt;= Kbytes. For read-only mappings, the application can&amp;#8217;t change the data so Dirty will always be zero (see these &lt;a href=&quot;https://simonis.github.io/JavaZone2018/CDS/cds.xhtml#/10/1&quot;&gt;slides&lt;/a&gt; and &lt;a href=&quot;https://vimeo.com/289644820#t=2789s&quot;&gt;presentation&lt;/a&gt; for more details about the CDS sections and layout).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;For the Java heap we can see that a slice of 34112k &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/code&gt;(which is exactly the size of &quot;Eden + From + To&quot;) and another one of 68288k &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/code&gt;(which corresponds to the size of Tenured) are committed while the remaining part of the heap &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/code&gt;(315392k + 630784k == 946176k == 1048576k - 102400k == 1048576 - (34112k + 68288k)) is only reserved. The interesting and maybe surprising part of this itemization is the fact that out of the 102400k committed Java heap (as displayed by the GC log and NMT) only 2144k (i.e. 1408k + 736k) are initially mapped to physical memory and account for the process' RSS.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;It is also interesting to see that for the old generation the RSS portion reported by &lt;code&gt;pmap&lt;/code&gt; corresponds exactly to the used part of that region as reported by the GC log if we align it to 4k pages  &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/code&gt;(i.e. 736k == (733k + 4k) &amp;amp; 0xfff8). For the new generation the 1408k RSS as reported by &lt;code&gt;pmap&lt;/code&gt;  &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/code&gt; is much smaller than the 2733k reported by the GC log as &quot;used&quot;. This difference is caused by a feature called &quot;thread local allocation buffer&quot; (TLAB) which is used to speed up allocations. It works by assigning each thread an own, private chunk of Eden such that it doesn&amp;#8217;t need to synchronize with other threads for each allocation. For the GC log, these parts of Eden count as &quot;used&quot;, although the threads owning them might not have filled them up (i.e. touched them) completely. If we run our sample application with &lt;code&gt;-XX:-UseTLAB&lt;/code&gt; we can see that the reported &quot;used&quot; size of &lt;mark&gt;1393k&lt;/mark&gt; for the new generation is much closer to the 1408k RSS as reported by &lt;code&gt;pmap&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;100m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NewSizeThreadIncrease&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NativeMemoryTracking&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;summary &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:-UseTLAB Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0) Heap before GC invocations=0 (full 0):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  def new generation   total 30720K, used &lt;mark&gt;1393K&lt;/mark&gt; [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   eden space 27328K,   5% used [0x00000000c0000000, 0x00000000c015c6a8, 0x00000000c1ab0000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The size of the TLAB is adaptive but can also be specified with the &lt;code&gt;-XX:TLABSize&lt;/code&gt; option. It defaults to zero which means that the initial size will be determined ergonomically. Unfortunately, this determined, initial size can only be logged in a debug build of the JVM with the command line option &lt;code&gt;-Xlog:tlab*=trace&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:tlab&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace &lt;span class=&quot;nt&quot;&gt;-version&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;[0.066s][trace][gc,tlab] TLAB min: 328 initial: 62914 max: 262144&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;To sum it up, we can see that after the first &lt;code&gt;System.gc()&lt;/code&gt;, our Java process only uses ~40m of RSS (i.e. 41820k according to &lt;code&gt;pmap&lt;/code&gt; and 40772k according to &lt;code&gt;Uncommit&lt;/code&gt;s output). The Java heap only contributes 2144k (i.e. 1408k + 736k) to this amount.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;allocating-memory&quot;&gt;Allocating memory&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After pressing &lt;code&gt;&amp;lt;Enter&amp;gt;&lt;/code&gt;, the sample application will allocate 512 megabaytes in chunks of &lt;code&gt;int[256]&lt;/code&gt; arrays (the amount of allocated megabytes can be configured with the first command line argument). The allocations will trigger several implicit GCs and increase the committed heap to accommodate for the new data. After all the allocations have been satisfied, we get the following output:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;GC(24) Heap after GC invocations=21 (full 5):
+GC(24)  def new generation   total &lt;mark class=&quot;level1&quot;&gt;30720K&lt;/mark&gt;, used 3392K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(24)   eden space &lt;mark&gt;27328K&lt;/mark&gt;,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)
+GC(24)   from space &lt;mark&gt;3392K&lt;/mark&gt;, 100% used [0x00000000c1ab0000, 0x00000000c1e00000, 0x00000000c1e00000)
+GC(24)   to   space &lt;mark&gt;3392K&lt;/mark&gt;,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(24)  tenured generation   total &lt;mark class=&quot;level2&quot;&gt;699072K&lt;/mark&gt;, used 530586K [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+GC(24)    the space 699072K,  75% used [0x00000000d5550000, 0x00000000f5b76990, 0x00000000f5b76a00, 0x0000000100000000)
+GC(24)  Metaspace       used 1066K, committed 1216K, reserved 1056768K
+GC(24)   class space    used 101K, committed 192K, reserved 1048576K
+Successfully allocated 512MB memory
+VmRSS:	  605720 kB
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The new generation is now using (i.e. has committed) 34112k (i.e. Eden + From + To == &lt;mark&gt;27328K&lt;/mark&gt; + &lt;mark&gt;3392K&lt;/mark&gt; + &lt;mark&gt;3392K&lt;/mark&gt; == &lt;mark class=&quot;level1&quot;&gt;30720K&lt;/mark&gt; + 3392K == 34112k) and the old generation is using &lt;mark class=&quot;level2&quot;&gt;699072k&lt;/mark&gt; which corresponds to its maximum size. These are the same numbers as reported by NMT (i.e. 699072k + 34112k == &lt;mark&gt;733184k&lt;/mark&gt;):&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;-                 Java Heap (reserved=1048576KB, committed=&lt;mark&gt;733184KB&lt;/mark&gt;)
+                            (mmap: reserved=1048576KB, committed=733184KB)&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;If we are looking at the &lt;code&gt;pmap&lt;/code&gt; output, we&amp;#8217;ll see:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   34112   34112   34112 rw---   [ anon ]   &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000  699072  530588  530588 rw---   [ anon ]   &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+0000000800000000      12      12      12 rwx-- classes.jsa
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;---------------- ------- ------- -------
+total kB         3536640  607048  579104                    &lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;(3)&lt;/b&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The Tenured generation is now fully committed and 530588k out of the total 699072k are mapped to physical memory &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/code&gt;. From the young generation, 34112k out of 315392k are committed and mapped to physical memory &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/code&gt;. These numbers correspond to the committed heap size reported by NMT (i.e. 699072k + 34112k == 733184k). The Java heap now contributes 564700k (i.e. 530588k + 34112k == 564700k) to the total of 607048k RSS &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;3&quot;&gt;&lt;/i&gt;&lt;b&gt;3&lt;/b&gt;&lt;/code&gt; (or 605720 as reported by the application) consumed by the Java process.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Pressing &lt;code&gt;&amp;lt;Enter&amp;gt;&lt;/code&gt; one more time, will unlink the allocated memory and make it available for reclamation by the GC:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;Successfully unlinked 512MB memory
+VmRSS:	  605960 kB
+
+Press &amp;lt;Enter&amp;gt;
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Every subsequent press of &lt;code&gt;&amp;lt;Enter&amp;gt;&lt;/code&gt; will trigger a new &lt;code&gt;System.gc()&lt;/code&gt;. The total number of system GCs is configurable as an optional, second command line parameter and defaults to 5. We will now take a look at the &lt;code&gt;CardGeneration::compute_new_size&lt;/code&gt; section in the log which we&amp;#8217;ve ignored until now:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code&gt;GC(25) Heap before GC invocations=21 (full 5):
+GC(25)  def new generation   total 30720K, used 14935K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(25)   eden space 27328K,  42% used [0x00000000c0000000, 0x00000000c0b45ec8, 0x00000000c1ab0000)
+GC(25)   from space 3392K, 100% used [0x00000000c1ab0000, 0x00000000c1e00000, 0x00000000c1e00000)
+GC(25)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(25)  tenured generation   total 699072K, used &lt;mark&gt;528963K&lt;/mark&gt; [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+GC(25)    the space 699072K,  75% used [0x00000000d5550000, 0x00000000f59e0df8, 0x00000000f59e0e00, 0x0000000100000000)
+
+&lt;span class=&quot;hll&quot;&gt;GC(25) CardGeneration::compute_new_size:
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)      free_after_gc   : 671718,8K   used_after_gc   : &lt;mark class=&quot;level1&quot;&gt;27353,2K&lt;/mark&gt;   capacity_after_gc   : 699072,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)      free_percentage:   0,96
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)     maximum_free_percentage:   0,70  minimum_used_percentage:   0,30
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)     _capacity_at_prologue: 699072,0K  minimum_desired_capacity: 68288,0K  maximum_desired_capacity: 91177,4K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)     shrinking:  initSize: 68288,0K  maximum_desired_capacity: &lt;mark class=&quot;level2&quot;&gt;91177,4K&lt;/mark&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(25)     shrink_bytes: 0,0K  current_shrink_factor: 0  new shrink factor: 10  _min_heap_delta_bytes: 192,0K
+&lt;/span&gt;
+GC(25) DefNew: 14935K(30720K)-&amp;gt;0K(30720K) Eden: 11543K(27328K)-&amp;gt;0K(27328K) From: 3392K(3392K)-&amp;gt;0K(3392K)
+GC(25) Tenured: &lt;mark&gt;528963K&lt;/mark&gt;(699072K)-&amp;gt;&lt;mark class=&quot;level1&quot;&gt;27353K&lt;/mark&gt;(699072K)
+
+GC(25) Heap after GC invocations=22 (full 6):
+GC(25)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(25)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)
+GC(25)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(25)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(25)  tenured generation   total 699072K, used &lt;mark class=&quot;level1&quot;&gt;27353K&lt;/mark&gt; [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+GC(25)    the space 699072K,   3% used [0x00000000d5550000, 0x00000000d70064e0, 0x00000000d7006600, 0x0000000100000000)
+Performed 1. System.gc()
+
+VmRSS:	  603992 kB
+Press &amp;lt;Enter&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This function gets called after each full GC to adjust the heap size between &lt;code&gt;InitialHeapSize&lt;/code&gt; and &lt;code&gt;MaxHeapSize&lt;/code&gt; if necessary. In addition to the initial and the maximum heap size it is controlled by the two parameters &lt;code&gt;MinHeapFreeRatio&lt;/code&gt; which denotes the minimum percentage of heap free after GC to avoid expansion and &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; which gives the maximum percentage of heap free after GC to avoid shrinking. For SerialGC the latter two parameters apply to the old generation only while for other GCs like G1 and ParallelGC they apply to the whole heap.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;&lt;code&gt;MinHeapFreeRatio&lt;/code&gt; (displayed as &lt;code&gt;minimum_free_percentage&lt;/code&gt; in the GC log) defaults to 40% and &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; (shown as &lt;code&gt;maximum_free_percentage&lt;/code&gt; in the log) defaults to 70%. After this full GC cycle the used part of Tenured has dropped from &lt;mark&gt;528963k&lt;/mark&gt; to &lt;mark class=&quot;level1&quot;&gt;27353.2k&lt;/mark&gt; which leads to a free ratio of 96% (i.e. (699072k - 27353.2k) / 699072k == 0.96%). In order to compute the new size of Tenured after this GC we have to take into account that our &lt;code&gt;maximum_free_percentage&lt;/code&gt; is 70%. So we set the currently &lt;code&gt;used_after_gc&lt;/code&gt; amount (i.e. 27353.2k) to 30% and compute the desired size of Tenured to &lt;mark class=&quot;level2&quot;&gt;91177.4k&lt;/mark&gt; (i.e. 27353.2k / 0.30 == 91177.4). Notice that the minimal shrunken size of Tenured (i.e. &lt;code&gt;minimum_desired_capacity&lt;/code&gt;) has a lower bound of 68288k which is the initially computed size of Tenured for a heap size of 100m.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This means that we could shrink Tenured after this GC cycle by 699072k - 91177k == 607895k. However, in order to avoid repetitive shrink/expand cycles, the JVM additionally damps the shrink amount (i.e. &lt;code&gt;shrink_bytes&lt;/code&gt;) by a series of hard-coded shrink factors which start at 0% and increase from 10% to 40% and finally 100%. Because the initial shrink factor is 0% &lt;code&gt;shrink_bytes&lt;/code&gt; evaluates to 0k which that means no heap reduction will happen after this GC. In the end, although this full GC has collected ~500m of garbage, the RSS footprint of the Java process remains almost unchanged at ~600m.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;If we press &lt;code&gt;&amp;lt;Enter&amp;gt;&lt;/code&gt; one more time, the second &lt;code&gt;System.gc()&lt;/code&gt; will be triggered after we&amp;#8217;ve unlinked the 512m of allocated memory:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code&gt;GC(26) Heap before GC invocations=22 (full 6):
+GC(26)  def new generation   total 30720K, used 534K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(26)   eden space 27328K,   1% used [0x00000000c0000000, 0x00000000c0085bb8, 0x00000000c1ab0000)
+GC(26)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(26)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(26)  tenured generation   total 699072K, used 27353K [0x00000000d5550000, 0x0000000100000000, 0x0000000100000000)
+GC(26)    the space 699072K,   3% used [0x00000000d5550000, 0x00000000d70064e0, 0x00000000d7006600, 0x0000000100000000)
+
+&lt;span class=&quot;hll&quot;&gt;GC(26) CardGeneration::compute_new_size:
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)      free_after_gc   : 671718,4K   used_after_gc   : 27353,6K   capacity_after_gc   : 699072,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)      free_percentage:   0,96
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)     maximum_free_percentage:   0,70  minimum_used_percentage:   0,30
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)     _capacity_at_prologue: 699072,0K  minimum_desired_capacity: 68288,0K  maximum_desired_capacity: 91178,7K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)     shrinking:  initSize: 68288,0K  maximum_desired_capacity: &lt;mark&gt;91178,7K&lt;/mark&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26)     shrink_bytes: &lt;mark class=&quot;level2&quot;&gt;60789,3K&lt;/mark&gt;  current_shrink_factor: &lt;mark class=&quot;level1&quot;&gt;10&lt;/mark&gt;  new shrink factor: 40  _min_heap_delta_bytes: 192,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(26) Shrinking tenured generation from 699072K to 638284K
+&lt;/span&gt;
+GC(26) DefNew: 534K(30720K)-&amp;gt;0K(30720K) Eden: 534K(27328K)-&amp;gt;0K(27328K) From: 0K(3392K)-&amp;gt;0K(3392K)
+GC(26) Tenured: 27353K(699072K)-&amp;gt;27353K(638284K)
+
+GC(26) Heap after GC invocations=23 (full 7):
+GC(26)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(26)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)
+GC(26)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(26)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(26)  tenured generation   total 638284K, used 27353K [0x00000000d5550000, 0x00000000fc4a3000, 0x0000000100000000)
+GC(26)    the space 638284K,   4% used [0x00000000d5550000, 0x00000000d7006678, 0x00000000d7006800, 0x00000000fc4a3000)
+Performed 2. System.gc()
+
+VmRSS:	  604028 kB
+Press &amp;lt;Enter&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This time the &lt;code&gt;maximum_desired_capacity&lt;/code&gt; is &lt;mark&gt;91178.7k&lt;/mark&gt; which, together with the new shrink factor of &lt;mark class=&quot;level1&quot;&gt;10%&lt;/mark&gt;, allows us to shrink (i.e. uncommit) the Tenured heap by &lt;mark class=&quot;level2&quot;&gt;60789.3k&lt;/mark&gt; (i.e. (699072k - 91178.7k) * 0.10 == 607893.3k * 0.10 == 60789.3k). Notice that although we&amp;#8217;ve uncommitted ~60m of old heap, the RSS footprint of the process still remains unchanged at ~600m. This is because the 60m memory which we&amp;#8217;ve just uncommitted haven&amp;#8217;t been touched before so they did not increase the memory footprint of the Java process. We can verify this by running &lt;code&gt;pmap&lt;/code&gt;. After the previous, 6th full GC, the memory layout of the heap looked as follows:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   34112   34112   34112 rw---   [ anon ]
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000  699072  528976  528976 rw---   [ anon ]  &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;You can see that the whole 699072k Tenured generation is committed, but only 528976k are dirty &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/code&gt;(i.e. have been touched). After the latest, 7th &lt;code&gt;System.gc()&lt;/code&gt;, the &lt;code&gt;pmap&lt;/code&gt; output looks as follows:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   34112   34112   34112 rw---   [ anon ]
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000  638284  528976  528976 rw---   [ anon ]  &lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;(1)&lt;/b&gt;
+00000000d90ad000   60788       0       0 -----   [ anon ]  &lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;(2)&lt;/b&gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As you can see, 60788k (i.e. 60789.3k aligned down to 4k pages) have now been uncommitted &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;2&quot;&gt;&lt;/i&gt;&lt;b&gt;2&lt;/b&gt;&lt;/code&gt;, but the number of dirty pages remains the same &lt;code class=&quot;callout&quot;&gt;&lt;i class=&quot;conum&quot; data-value=&quot;1&quot;&gt;&lt;/i&gt;&lt;b&gt;1&lt;/b&gt;&lt;/code&gt;. Uncommitting has no impact on the RSS footprint in this case. Let&amp;#8217;s see what happens if we trigger yet another &lt;code&gt;System.gc()&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code&gt;GC(27) Heap before GC invocations=23 (full 7):
+GC(27)  def new generation   total 30720K, used 534K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(27)   eden space 27328K,   1% used [0x00000000c0000000, 0x00000000c0085bc0, 0x00000000c1ab0000)
+GC(27)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(27)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(27)  tenured generation   total 638284K, used &lt;mark&gt;27354K&lt;/mark&gt; [0x00000000d5550000, 0x00000000fc4a3000, 0x0000000100000000)
+GC(27)    the space 638284K,   4% used [0x00000000d5550000, 0x00000000d70068a8, 0x00000000d7006a00, 0x00000000fc4a3000)
+
+&lt;span class=&quot;hll&quot;&gt;GC(27) CardGeneration::compute_new_size:
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)      free_after_gc   : 637481,5K   used_after_gc   :  802,5K   capacity_after_gc   : 638284,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)      free_percentage:   1,00
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)     maximum_free_percentage:   0,70  minimum_used_percentage:   0,30
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)     _capacity_at_prologue: 638284,0K  minimum_desired_capacity: 68288,0K  maximum_desired_capacity: 68288,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)     shrinking:  initSize: 68288,0K  maximum_desired_capacity: &lt;mark class=&quot;level1&quot;&gt;68288,0K&lt;/mark&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27)     shrink_bytes: &lt;mark class=&quot;level2&quot;&gt;227998,4K&lt;/mark&gt;  current_shrink_factor: &lt;mark class=&quot;level2&quot;&gt;40&lt;/mark&gt;  new shrink factor: 100  _min_heap_delta_bytes: 192,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(27) Shrinking tenured generation from 638284K to 410288K
+&lt;/span&gt;
+GC(27) DefNew: 534K(30720K)-&amp;gt;0K(30720K) Eden: 534K(27328K)-&amp;gt;0K(27328K) From: 0K(3392K)-&amp;gt;0K(3392K)
+GC(27) Tenured: &lt;mark&gt;27354K&lt;/mark&gt;(638284K)-&amp;gt;&lt;mark&gt;802K&lt;/mark&gt;(410288K)
+
+GC(27) Heap after GC invocations=24 (full 8):
+GC(27)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(27)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)
+GC(27)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(27)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(27)  tenured generation   total 410288K, used &lt;mark&gt;802K&lt;/mark&gt; [0x00000000d5550000, 0x00000000ee5fc000, 0x0000000100000000)
+GC(27)    the space 410288K,   0% used [0x00000000d5550000, 0x00000000d56189d8, 0x00000000d5618a00, 0x00000000ee5fc000)
+Performed 3. System.gc()
+
+VmRSS:	  484636 kB
+Press &amp;lt;Enter&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;This time, occupancy of Tenured after the GC has dropped from &lt;mark&gt;27354k&lt;/mark&gt; to &lt;mark&gt;802k&lt;/mark&gt;. This means that we could potentially further shrink Tenured down to 2675k (i.e. 802.5 / 0.3 == 2675k) but because we have to respect the initial Tenured size as lower bound &lt;code&gt;maximum_desired_capacity&lt;/code&gt; becomes &lt;mark class=&quot;level1&quot;&gt;68288k&lt;/mark&gt; which is equal to &lt;code&gt;minimum_desired_capacity&lt;/code&gt;. Together with the new shrink factor of &lt;mark class=&quot;level2&quot;&gt;40%&lt;/mark&gt; this allows us to shrink the old heap by another &lt;mark class=&quot;level2&quot;&gt;227998.4k&lt;/mark&gt; (i.e. (638284k - 68288k) * 0.4 = 227998.4k). We can see that the RSS footprint of the process has now finally dropped from ~600m down to ~480m. This is still less than the ~220m we&amp;#8217;ve shrunken the heap, but we know by now that it&amp;#8217;s not the amount of uncommitted memory which is crucial, but the amount of &lt;em&gt;dirty&lt;/em&gt; memory we&amp;#8217;ve uncommitted.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The previous &lt;code&gt;pmap&lt;/code&gt; output after the 7th full GC looked as follows:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   34112   34112   34112 rw---   [ anon ]
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000  638284  &lt;mark class=&quot;level1&quot;&gt;528976&lt;/mark&gt;  528976 rw---   [ anon ]
+00000000d90ad000   &lt;mark&gt;60788&lt;/mark&gt;       0       0 -----   [ anon ]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Comparing the previous memory map with the current one confirms these results:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   34112   34112   34112 rw---   [ anon ]
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000  410288  &lt;mark class=&quot;level1&quot;&gt;410288&lt;/mark&gt;  410288 rw---   [ anon ]
+00000000ee5fc000  &lt;mark&gt;288784&lt;/mark&gt;       0       0 -----   [ anon ]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;We&amp;#8217;ve uncommitted an additional amount of 227996k (i.e. &lt;mark&gt;288784k&lt;/mark&gt; - &lt;mark&gt;60788k&lt;/mark&gt; == 227996k) which corresponds exactly to &lt;code&gt;shrink_bytes&lt;/code&gt; aligned down to 4k pages. And this time, out of the 227996k uncommitted memory, 118688k (i.e. &lt;mark class=&quot;level1&quot;&gt;528976k&lt;/mark&gt; - &lt;mark class=&quot;level1&quot;&gt;410288k&lt;/mark&gt; == 118688k) have been dirty which correlates quite well with the observed decrease in the proecss' RSS usage from 604028k down to 484636k (i.e. 604028k - 484636k == 119392k).&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After the 4th &lt;code&gt;System.gc()&lt;/code&gt; we&amp;#8217;re finally down the initial Tenured size of &lt;mark&gt;68288k&lt;/mark&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code&gt;GC(28) Heap before GC invocations=24 (full 8):
+GC(28)  def new generation   total 30720K, used 808K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(28)   eden space 27328K,   2% used [0x00000000c0000000, 0x00000000c00ca0f8, 0x00000000c1ab0000)
+GC(28)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(28)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(28)  tenured generation   total 410288K, used 802K [0x00000000d5550000, 0x00000000ee5fc000, 0x0000000100000000)
+GC(28)    the space 410288K,   0% used [0x00000000d5550000, 0x00000000d56189d8, 0x00000000d5618a00, 0x00000000ee5fc000)
+
+&lt;span class=&quot;hll&quot;&gt;GC(28) CardGeneration::compute_new_size:
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)      free_after_gc   : 409485,2K   used_after_gc   :  802,8K   capacity_after_gc   : 410288,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)      free_percentage:   1,00
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)     maximum_free_percentage:   0,70  minimum_used_percentage:   0,30
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)     _capacity_at_prologue: 410288,0K  minimum_desired_capacity: 68288,0K  maximum_desired_capacity: 68288,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)     shrinking:  initSize: 68288,0K  maximum_desired_capacity: 68288,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28)     shrink_bytes: 342000,0K  current_shrink_factor: 100  new shrink factor: 100  _min_heap_delta_bytes: 192,0K
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;GC(28) Shrinking tenured generation from 410288K to &lt;mark&gt;68288K&lt;/mark&gt;
+&lt;/span&gt;
+GC(28) DefNew: 808K(30720K)-&amp;gt;0K(30720K) Eden: 808K(27328K)-&amp;gt;0K(27328K) From: 0K(3392K)-&amp;gt;0K(3392K)
+GC(28) Tenured: 802K(410288K)-&amp;gt;802K(&lt;mark&gt;68288K&lt;/mark&gt;)
+
+GC(28) Heap after GC invocations=25 (full 9):
+GC(28)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(28)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)
+GC(28)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(28)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(28)  tenured generation   total &lt;mark&gt;68288K&lt;/mark&gt;, used 802K [0x00000000d5550000, 0x00000000d9800000, 0x0000000100000000)
+GC(28)    the space 68288K,   1% used [0x00000000d5550000, 0x00000000d5618b10, 0x00000000d5618c00, 0x00000000d9800000)
+Performed 4. System.gc()
+
+VmRSS:	  &lt;mark class=&quot;level1&quot;&gt;141304 kB&lt;/mark&gt;
+Press &amp;lt;Enter&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The RSS footprint has significantly dropped down to &lt;mark class=&quot;level1&quot;&gt;~140m&lt;/mark&gt; but is still significantly higher compared to the ~40m before the allocation of 512m of data by the application. The output of &lt;code&gt;pmap&lt;/code&gt; shows that although the live set of Java objects in New and Tenured only requires ~800k of memory, both New and Tenured are now fully touched and dirty up to the amount of &lt;code&gt;InitialHeapSize&lt;/code&gt; (i.e. &lt;mark&gt;68288k&lt;/mark&gt; + &lt;mark&gt;34112k&lt;/mark&gt; == 102400k == 100m) and contribute with 100m to the RSS footprint of the process:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   34112   &lt;mark&gt;34112&lt;/mark&gt;   34112 rw---   [ anon ]
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000   68288   &lt;mark&gt;68288&lt;/mark&gt;   68288 rw---   [ anon ]
+00000000d9800000  630784       0       0 -----   [ anon ]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;These 100m which correspond to the difference between the initial and the current memory usage won&amp;#8217;t go away, no matter how often we will call &lt;code&gt;System.gc()&lt;/code&gt; and no matter how low the heap consumption will decrease.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;fine-tuning&quot;&gt;Fine tuning&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;xxalwayspretouch&quot;&gt;&lt;code&gt;-XX:+AlwaysPreTouch&lt;/code&gt;&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;The fact that Linux by default lazily maps committed, virtual memory to real, physical memory only when the corresponding memory pages get actually touched is a nice optimization which helps to save memory and CPU cycles at startup. But it also comes at a cost. Depending on the &lt;a href=&quot;https://www.kernel.org/doc/Documentation/vm/overcommit-accounting&quot;&gt;memory overcommit settings&lt;/a&gt; an application might run into out of memory situations long time after it has reserved and committed the amount of memory it requires. Also, mapping virtual to physical pages on demand can cause unpredictable delays for certain memory accesses. To mitigate these drawbacks, the OpenJDK provides the &lt;code&gt;-XX:+AlwaysPreTouch&lt;/code&gt; option (off by default) which will immediately touch (i.e. map to phyiscal memory) all the committed heap and code cache parts right at JVM startup. Enabling &lt;code&gt;-XX:+AlwaysPreTouch&lt;/code&gt; slows done the startup a little bit but leads to more consistent and constant runtime behavior.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Running our example &lt;code&gt;Uncommit&lt;/code&gt; application with &lt;code&gt;-XX:+AlwaysPreTouch&lt;/code&gt; will result in the following GC log output for the first &lt;code&gt;System.gc()&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;100m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NewSizeThreadIncrease&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+AlwaysPreTouch Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0) Heap after GC invocations=1 (full 1):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)  tenured generation   total 68288K, used 733K [0x00000000d5550000, 0x00000000d9800000, 0x0000000100000000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(0)    the space 68288K,   1% used [0x00000000d5550000, 0x00000000d5607500, 0x00000000d5607600, 0x00000000d9800000)&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;VmRSS:	  &lt;mark&gt;147532&lt;/mark&gt; kB&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Compared to before when running with the default &lt;code&gt;-XX:-AlwaysPreTouch&lt;/code&gt; setting, the size and occupancy of New and Tenured are exactly the same, but the RSS footprint of the whole process has increased from ~40m to &lt;mark&gt;~147m&lt;/mark&gt;. Double checking with &lt;code&gt;pmap&lt;/code&gt; confirms, that the committed parts of New and Tenured have the same size like before with the only difference that they are now fully dirty (i.e. completely mapped to physical pages):&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;go&quot;&gt;Address           Kbytes     RSS   Dirty Mode  Mapping
+00000000c0000000   &lt;mark&gt;34112&lt;/mark&gt;   &lt;mark&gt;34112&lt;/mark&gt;   34112 rw---   [ anon ]
+00000000c2150000  315392       0       0 -----   [ anon ]
+00000000d5550000   &lt;mark class=&quot;level1&quot;&gt;68288&lt;/mark&gt;   &lt;mark class=&quot;level1&quot;&gt;68288&lt;/mark&gt;   68288 rw---   [ anon ]
+00000000d9800000  630784       0       0 -----   [ anon ]&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;A careful reader might have observed that the fully touched heap only accounts for ~100m additional memory. The remaining ~7m of additional RSS memory originate from the Code Cache (used by the JIT compilers) which has now also been completely touched at startup. With &lt;code&gt;-XX:+AlwaysPreTouch&lt;/code&gt; the maximum RSS footprint of our example application will increase up to ~780m (compared to ~600m before) but than decrease back to the initial ~147m after calling &lt;code&gt;System.gc()&lt;/code&gt; four times.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;xx-shrinkheapinsteps&quot;&gt;&lt;code&gt;-XX:-ShrinkHeapInSteps&lt;/code&gt;&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As we have seen in our example, it takes four full GC cycles with SerialGC to return all non-required heap memory back to the OS. The predefined shrink factors can help to avoid oscillating heap size changes but in some situations it might be beneficial if the the application itself could fully control when heap memory will be returned to the OS. Since jdk 9 this is possible with the new &lt;code&gt;-XX:-ShrinkHeapInSteps&lt;/code&gt; option which is on by default (see &lt;a href=&quot;https://bugs.openjdk.java.net/browse/JDK-8146436&quot;&gt;JDK-8146436: Add -XX:-ShrinkHeapInSteps option&lt;/a&gt;). If &lt;code&gt;ShrinkHeapInSteps&lt;/code&gt; is disabled, a call to &lt;code&gt;System.gc()&lt;/code&gt; will always shrink the heap down right to the &lt;code&gt;maximum_desired_capacity&lt;/code&gt; (i.e. the shrink factor will always be 100%). With this option, we will get the following log for the first &lt;code&gt;System.gc()&lt;/code&gt; after the allocation:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;100m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NewSizeThreadIncrease&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:-ShrinkHeapInSteps Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25) CardGeneration::compute_new_size:&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)      free_after_gc   : 671718,8K   used_after_gc   : 27353,2K   capacity_after_gc   : 699072,0K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)      free_percentage:   0,96&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     maximum_free_percentage:   0,70  minimum_used_percentage:   0,30&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     _capacity_at_prologue: 699072,0K  &lt;mark&gt;minimum_desired_capacity: 68288,0K&lt;/mark&gt;  maximum_desired_capacity: 91177,4K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     shrinking:  initSize: 68288,0K  &lt;mark class=&quot;level1&quot;&gt;maximum_desired_capacity: 91177,4K&lt;/mark&gt;&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     shrink_bytes: 607894,6K  current_shrink_factor: 0  new shrink factor: 0  _min_heap_delta_bytes: 192,0K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25) &lt;mark class=&quot;level2&quot;&gt;Shrinking tenured generation from 699072K to 91180K&lt;/mark&gt;&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;GC(25) DefNew: 14935K(30720K)-&amp;gt;0K(30720K) Eden: 11543K(27328K)-&amp;gt;0K(27328K) From: 3392K(3392K)-&amp;gt;0K(3392K)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25) Tenured: 528963K(699072K)-&amp;gt;27353K(91180K)&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;GC(25) Heap after GC invocations=22 (full 6):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)  tenured generation   total 91180K, used 27353K [0x00000000d5550000, 0x00000000dae5b000, 0x0000000100000000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)    the space 91180K,  29% used [0x00000000d5550000, 0x00000000d70064e0, 0x00000000d7006600, 0x00000000dae5b000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Performed 1. System.gc()&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;VmRSS:	  165052 kB&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Press &amp;lt;Enter&amp;gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;We still need a second full GC to shrink the heap to its initial size, because after the first one the computed &lt;code&gt;maximum_desired_capacity&lt;/code&gt; is still bigger than the &lt;code&gt;minimum_desired_capacity&lt;/code&gt;:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;GC(26) CardGeneration::compute_new_size:
+GC(26)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60
+GC(26)      free_after_gc   : 90378,1K   used_after_gc   :  801,9K   capacity_after_gc   : 91180,0K
+GC(26)      free_percentage:   0,99
+GC(26)     maximum_free_percentage:   0,70  minimum_used_percentage:   0,30
+GC(26)     _capacity_at_prologue: 91180,0K  minimum_desired_capacity: 68288,0K  maximum_desired_capacity: 68288,0K
+GC(26)     shrinking:  initSize: 68288,0K  maximum_desired_capacity: 68288,0K
+GC(26)     shrink_bytes: 22892,0K  &lt;mark&gt;current_shrink_factor: 0&lt;/mark&gt;  &lt;mark&gt;new shrink factor: 0&lt;/mark&gt;  _min_heap_delta_bytes: 192,0K
+GC(26) &lt;mark class=&quot;level2&quot;&gt;Shrinking tenured generation from 91180K to 68288K&lt;/mark&gt;
+
+GC(26) DefNew: 534K(30720K)-&amp;gt;0K(30720K) Eden: 534K(27328K)-&amp;gt;0K(27328K) From: 0K(3392K)-&amp;gt;0K(3392K)
+GC(26) Tenured: 27353K(91180K)-&amp;gt;801K(68288K)
+
+GC(26) Heap after GC invocations=23 (full 7):
+GC(26)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)
+GC(26)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)
+GC(26)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)
+GC(26)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)
+GC(26)  tenured generation   total 68288K, used 801K [0x00000000d5550000, 0x00000000d9800000, 0x0000000100000000)
+GC(26)    the space 68288K,   1% used [0x00000000d5550000, 0x00000000d56187a8, 0x00000000d5618800, 0x00000000d9800000)
+Performed 2. System.gc()
+
+VmRSS:	  142032 kB
+Press &amp;lt;Enter&amp;gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Notice how both, the current and the new shrink factor are misleadingly printed as zero instead of 100 although we&amp;#8217;re running with &lt;code&gt;-XX:-ShrinkHeapInSteps&lt;/code&gt;. This issue will be fixed by &lt;a href=&quot;https://bugs.openjdk.java.net/browse/JDK-8270100&quot;&gt;JDK-8270100&lt;/a&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;xxmaxheapfreeratio&quot;&gt;&lt;code&gt;-XX:MaxHeapFreeRatio&lt;/code&gt;&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;As we&amp;#8217;ve seen in the previous section, even with &lt;code&gt;-XX:-ShrinkHeapInSteps&lt;/code&gt; we still need two full GC cycles to return to the initial heap layout just before the temporary allocation of 512m. This is because after the first &lt;code&gt;System.gc()&lt;/code&gt; Tenured still contains 27353.2k of uncollected objects and in order to comply to the default setting of 70% &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; we can&amp;#8217;t shrink Tenured below 91177.4k (i.e. 27353.2k / (1 - 0.70) == 91177.4k). However, if we relax this requirement to just 50% &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; (i.e. 27353.2k / (1 - 0.50) == 54706.4k) we will be able to shrink Tenured back to its initial size right after the first full GC:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;100m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NewSizeThreadIncrease&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:-ShrinkHeapInSteps &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapFreeRatio&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;50 Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25) CardGeneration::compute_new_size:&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     minimum_free_percentage:   0,40  maximum_used_percentage:   0,60&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)      free_after_gc   : 671719,0K   used_after_gc   : 27353,0K   capacity_after_gc   : 699072,0K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)      free_percentage:   0,96&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     maximum_free_percentage:   0,50  minimum_used_percentage:   0,50&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     _capacity_at_prologue: 699072,0K  minimum_desired_capacity: 68288,0K  maximum_desired_capacity: 68288,0K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     shrinking:  initSize: 68288,0K  maximum_desired_capacity: 68288,0K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)     shrink_bytes: 630784,0K  current_shrink_factor: 0  new shrink factor: 0  _min_heap_delta_bytes: 192,0K&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25) &lt;mark&gt;Shrinking tenured generation from 699072K to 68288K&lt;/mark&gt;&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;GC(25) DefNew: 14926K(30720K)-&amp;gt;0K(30720K) Eden: 11534K(27328K)-&amp;gt;0K(27328K) From: 3392K(3392K)-&amp;gt;0K(3392K)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25) Tenured: 529002K(699072K)-&amp;gt;27352K(68288K)&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;GC(25) Heap after GC invocations=22 (full 6):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)  def new generation   total 30720K, used 0K [0x00000000c0000000, 0x00000000c2150000, 0x00000000d5550000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)   eden space 27328K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c1ab0000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)   from space 3392K,   0% used [0x00000000c1ab0000, 0x00000000c1ab0000, 0x00000000c1e00000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)   to   space 3392K,   0% used [0x00000000c1e00000, 0x00000000c1e00000, 0x00000000c2150000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)  tenured generation   total 68288K, used 27352K [0x00000000d5550000, 0x00000000d9800000, 0x0000000100000000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(25)    the space 68288K,  40% used [0x00000000d5550000, 0x00000000d70063e0, 0x00000000d7006400, 0x00000000d9800000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Performed 1. System.gc()&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;VmRSS:	  141464 kB&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Press &amp;lt;Enter&amp;gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Choosing a smaller value for &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; allows more memory to be freed from Tenured and returned back to the OS. However, the smaller we choose it, the fewer head room we leave in Tenured. This can lead to more frequent heap expansions afterwards if new allocations require more memory. We also have to ensure that &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; is greater than or equal to &lt;code&gt;MinHeapFreeRatio&lt;/code&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect2&quot;&gt;
+&lt;h3 id=&quot;xxinitialheapsize&quot;&gt;&lt;code&gt;-XX:InitialHeapSize&lt;/code&gt;&lt;/h3&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;With all the current tuning we still can&amp;#8217;t reach an RSS footprint below ~140m. This is still ~100m more than to initial RSS size before the temporary allocation of 512m of data. The reason for this difference is the fact that even though we&amp;#8217;ve returned all unused Java heap memory to the OS, the remaining committed part of the heap remains completely touched (i.e. mapped to physical memory). However, if we know that our application has temporary allocation spikes (like the allocation of 512m in our example programm) but in general runs just fine with a much smaller heap, we can easily configure a significantly smaller &lt;code&gt;InitialHeapSize&lt;/code&gt;. If we experimentally set &lt;code&gt;InitialHeapSize&lt;/code&gt; to just 1m and both, &lt;code&gt;MinHeapFreeRatio&lt;/code&gt; and &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; to 10% we will get the following behavior:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;hll&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;w&quot;&gt; &lt;/span&gt;java &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseSerialGC &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:InitialHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1m &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;1g &lt;span class=&quot;nt&quot;&gt;-Xlog&lt;/span&gt;:gc+heap&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;trace::none &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:NewSizeThreadIncrease&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:-ShrinkHeapInSteps &lt;span class=&quot;se&quot;&gt;\&lt;/span&gt;
+&lt;/span&gt;&lt;span class=&quot;hll&quot;&gt;       &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MinHeapFreeRatio&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;10 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxHeapFreeRatio&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;10 Uncommit
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;Calling System.gc()&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1) Heap after GC invocations=2 (full 1):&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1)  def new generation   total 1152K, used 0K [0x00000000c0000000, 0x00000000c0140000, 0x00000000d5550000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1)   eden space &lt;mark&gt;1024K&lt;/mark&gt;,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c0100000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1)   from space &lt;mark&gt;128K&lt;/mark&gt;,   0% used [0x00000000c0120000, 0x00000000c0120000, 0x00000000c0140000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1)   to   space &lt;mark&gt;128K&lt;/mark&gt;,   0% used [0x00000000c0100000, 0x00000000c0100000, 0x00000000c0120000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1)  tenured generation   total 768K, used 736K [0x00000000d5550000, 0x00000000d5610000, 0x0000000100000000)&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;GC(1)    the space &lt;mark class=&quot;level1&quot;&gt;768K&lt;/mark&gt;,  95% used [0x00000000d5550000, 0x00000000d56080b8, 0x00000000d5608200, 0x00000000d5610000)&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;VmRSS:	   &lt;mark class=&quot;level2&quot;&gt;40288&lt;/mark&gt; kB&lt;/span&gt;
+
+&lt;span class=&quot;go&quot;&gt;Press &amp;lt;Enter&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;Before the allocation of 512m, the young generation is now just 1280k (i.e. &lt;mark&gt;1024k&lt;/mark&gt; + &lt;mark&gt;128k&lt;/mark&gt; + &lt;mark&gt;128k&lt;/mark&gt; = 1280k) and Tenured just &lt;mark class=&quot;level1&quot;&gt;768k&lt;/mark&gt;. Notice that the JVM already ran an implicit GC before we explicitly called &lt;code&gt;System.gc()&lt;/code&gt; for the first time to free some space in the small, one megabyte large initial heap. The overall RSS footprint of the process is still &lt;mark class=&quot;level2&quot;&gt;~40m&lt;/mark&gt;.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;GC(&lt;mark class=&quot;level1&quot;&gt;597&lt;/mark&gt;) Heap after GC invocations=555 (full &lt;mark class=&quot;level2&quot;&gt;44&lt;/mark&gt;):
+GC(597)  def new generation   total 1152K, used 128K [0x00000000c0000000, 0x00000000c0140000, 0x00000000d5550000)
+GC(597)   eden space 1024K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c0100000)
+GC(597)   from space 128K, 100% used [0x00000000c0100000, 0x00000000c0120000, 0x00000000c0120000)
+GC(597)   to   space 128K,   0% used [0x00000000c0120000, 0x00000000c0120000, 0x00000000c0140000)
+GC(597)  tenured generation   total 584356K, used 542504K [0x00000000d5550000, 0x00000000f8ff9000, 0x0000000100000000)
+GC(597)    the space 584356K,  92% used [0x00000000d5550000, 0x00000000f671a368, 0x00000000f671a400, 0x00000000f8ff9000)
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;Successfully allocated 512MB memory
+VmRSS:	  &lt;mark&gt;584388 kB&lt;/mark&gt;
+
+Press &amp;lt;Enter&amp;gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;After the allocation of 512m of data, the RSS usage of &lt;mark&gt;~580m&lt;/mark&gt; is slightly smaller compared to the ~600m before (with the default settings for &lt;code&gt;MinHeapFreeRatio&lt;/code&gt; and &lt;code&gt;MaxHeapFreeRatio&lt;/code&gt; and an &lt;code&gt;InitialHeapSize&lt;/code&gt; of 100m). However, notice how with these somehow &lt;em&gt;extreme&lt;/em&gt; settings, the JVM already had to run &lt;mark class=&quot;level1&quot;&gt;597&lt;/mark&gt; implicit garbage collections (out of which &lt;mark class=&quot;level2&quot;&gt;44&lt;/mark&gt; were full GCs) to allow the allocation of 512m data. With the default settings and 100m &lt;code&gt;InitialHeapSize&lt;/code&gt; only 24 implicit GCs (with 5 full ones) were necessary.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;On the other hand, the first full GC after the allocation (i.e. &lt;mark class=&quot;level2&quot;&gt;full 45&lt;/mark&gt;) now instantly reduces the RSS footprint back to &lt;mark&gt;~42m&lt;/mark&gt; which is only minimally higher compared to the ~40m before the allocation:&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;listingblock&quot;&gt;
+&lt;div class=&quot;content&quot;&gt;
+&lt;pre class=&quot;rouge highlight nowrap&quot;&gt;&lt;code data-lang=&quot;console&quot;&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;GC(598) Shrinking tenured generation from 584356K to 2712K
+GC(598) DefNew: 1110K(1152K)-&amp;gt;0K(1152K) Eden: 982K(1024K)-&amp;gt;0K(1024K) From: 128K(128K)-&amp;gt;0K(128K)
+GC(598) Tenured: 542504K(584356K)-&amp;gt;2439K(2712K)
+GC(598) Heap after GC invocations=556 (&lt;mark class=&quot;level2&quot;&gt;full 45&lt;/mark&gt;):
+GC(598)  def new generation   total 1152K, used 0K [0x00000000c0000000, 0x00000000c0140000, 0x00000000d5550000)
+GC(598)   eden space 1024K,   0% used [0x00000000c0000000, 0x00000000c0000000, 0x00000000c0100000)
+GC(598)   from space 128K,   0% used [0x00000000c0100000, 0x00000000c0100000, 0x00000000c0120000)
+GC(598)   to   space 128K,   0% used [0x00000000c0120000, 0x00000000c0120000, 0x00000000c0140000)
+GC(598)  tenured generation   total 2712K, used 2439K [0x00000000d5550000, 0x00000000d57f6000, 0x0000000100000000)
+GC(598)    the space 2712K,  89% used [0x00000000d5550000, 0x00000000d57b1d40, 0x00000000d57b1e00, 0x00000000d57f6000)
+&lt;/span&gt;&lt;span class=&quot;c&quot;&gt;...
+&lt;/span&gt;&lt;span class=&quot;go&quot;&gt;Performed 1. System.gc()
+
+VmRSS:	   &lt;mark&gt;42660 kB&lt;/mark&gt;
+Press &amp;lt;Enter&amp;gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;In the end, we can tune Serial GC to either always consume just the absolutely required minimum heap memory (which results in increased CPU usage due to more frequent GCs) or to favor fewer GC cycles at the expense of a higher memory footprint. It&amp;#8217;s up to the user to choose the right balance for his application and runtime environment.&lt;/p&gt;
+&lt;/div&gt;
+&lt;div class=&quot;paragraph&quot;&gt;
+&lt;p&gt;We&amp;#8217;ve also seen that configuring and tuning the JVM can be quite tricky. Always make sure that the numbers you measure really match up, never believe just a single source of information and always try to double check your results at different levels with different tools :)&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;sect1&quot;&gt;
+&lt;h2 id=&quot;command-line-options&quot;&gt;Appendix A: Command Line Options&lt;/h2&gt;
+&lt;div class=&quot;sectionbody&quot;&gt;
+&lt;table class=&quot;tableblock frame-all grid-all stretch&quot;&gt;
+&lt;colgroup&gt;
+&lt;col style=&quot;width: 33.3333%;&quot;&gt;
+&lt;col style=&quot;width: 33.3333%;&quot;&gt;
+&lt;col style=&quot;width: 33.3334%;&quot;&gt;
+&lt;/colgroup&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th class=&quot;tableblock halign-left valign-top&quot;&gt;Option&lt;/th&gt;
+&lt;th class=&quot;tableblock halign-left valign-top&quot;&gt;Default Value&lt;/th&gt;
+&lt;th class=&quot;tableblock halign-left valign-top&quot;&gt;Description&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;MinHeapSize&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;0&lt;/code&gt; (i.e. &lt;em&gt;ergonomic&lt;/em&gt;)&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;Minimum heap size in bytes.&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;InitialHeapSize&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;0&lt;/code&gt; (i.e. &lt;em&gt;ergonomic&lt;/em&gt;)&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;Initial heap size in bytes.&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;MaxHeapSize&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;&lt;code&gt;96m&lt;/code&gt;&lt;/p&gt;&lt;/td&gt;
+&lt;td class=&quot;tableblock halign-left valign-top&quot;&gt;&lt;p class=&quot;tableblock&quot;&gt;Initial heap size in bytes.&lt;/p&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+&lt;/div&gt;</content><author><name>Volker Simonis</name></author><category term="openjdk" /></entry></feed>
