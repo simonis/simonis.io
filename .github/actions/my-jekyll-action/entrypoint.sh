@@ -23,8 +23,6 @@ ls -la
 
 git status
 
-sudo bundle exec jekyll build --trace --verbose --destination ./docs/
+bundle exec jekyll build --trace --verbose --destination ./docs/
 
 git status
-
-
