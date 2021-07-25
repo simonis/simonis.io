@@ -6,10 +6,16 @@ on:
       - master
 
 jobs:
-  github-pages:
+  build-and-publish:
+
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v2
-      - uses: .github/actions/my-jekyll-action
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Hello world action step
+        uses: ./.github/actions/my-jekyll-action/
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
