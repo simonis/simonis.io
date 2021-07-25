@@ -27,10 +27,14 @@ ls -la
 
 git status
 
+git config user.name "${GITHUB_ACTOR}"
+git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
 git add docs/
+
+git status
+
 LAST_COMMIT=`git log -1 --pretty=format:"%s"`
 git commit -m "Recreated for: $LAST_COMMIT"
 
-git config user.name "${GITHUB_ACTOR}" && \
-git config user.email "${GITHUB_ACTOR}@users.noreply.github.com" && \
 git push "https://${GITHUB_ACTOR}:${INPUT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
