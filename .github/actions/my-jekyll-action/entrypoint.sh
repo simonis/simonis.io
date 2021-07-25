@@ -18,7 +18,7 @@ touch xxx.txt
 ls -la xxx.txt
 
 chmod go+w .
-chmod --recursive go+w docs/
+chmod -R go+w docs/
 ls -la
 
 git status
