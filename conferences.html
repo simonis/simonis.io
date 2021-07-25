@@ -1,0 +1,45 @@
+---
+layout: default
+title: Conferences
+permalink: /conferences/
+---
+
+{%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}
+{%- assign sortedTalks = site.data.conferences | sort: "date" | reverse -%}
+{%- assign start-year = "9999" -%}
+{%- assign year = start-year -%}
+
+{%- for talk in sortedTalks -%}
+
+  {%- assign talk-year = talk.date | date: "%Y" -%}
+  {%- if talk-year < year -%}
+    {%- if year != start-year -%}
+      </ul>
+    {%- endif -%}
+    {%- assign year = talk-year -%}
+    <h1>{{ talk-year }}</h1>
+    <ul class="post-list">
+  {% endif %}
+      <li>
+        <h3 class="post-link">
+          {%- if talk.talk-url -%}<a href="{{talk.talk-url}}">{%- endif -%}
+            {{ talk.title }}
+          {%- if talk.talk-url -%}</a>{%- endif -%}
+        </h3>
+        <p class="post-meta">
+          {%- if talk.conf-url -%}<a href="{{talk.conf-url}}">{%- endif -%}
+          <span>{{ talk.conference }}</span>
+          {%- if talk.conf-url -%}</a>{%- endif -%}
+          <span> • </span>
+          <span>{{ talk.city}}, {{ talk.country }}</span>
+          <span> • </span>
+          <span>{{ talk.date | date: date_format }}</span>
+          <span> • </span>
+          <span><a href="{{ talk.slides }}">slides</a></span>
+          {% if talk.video %}
+           , <span><a href="{{ talk.video }}">video</a></span>
+          {% endif %}
+        </p>
+      </li>
+
+{%- endfor -%}

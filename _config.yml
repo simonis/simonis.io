@@ -1,0 +1,46 @@
+title: Volker Simonis
+author:
+  name: Volker Simonis
+  email: volker.simonis@gmail.com
+description: > # this means to ignore newlines until "show_excerpts:"
+  Musings about OpenJDK and JVM technology.
+
+show_excerpts: false # set to true to show excerpts on the homepage
+
+# Minima date format
+# refer to https://shopify.github.io/liquid/filters/date/ if you want to customize this
+minima:
+  date_format: "%b %-d, %Y"
+
+  # generate social links in footer
+  social_links:
+    twitter: volker_simonis
+    github:  simonis
+    facebook: volker.simonis
+    linkedin: volker-simonis
+    youtube_channel: UCEJItpuRpRsyelsB3Rli7Jg
+    keybase: volker_simonis
+
+# If you want to link only specific pages in your header, uncomment
+# this and add the path to the pages in order as they should show up
+header_pages:
+ - blog.adoc
+ - conferences.html
+ - cv.html
+ - about.adoc
+
+exclude:
+ - Dockerfile
+
+# Build settings
+theme: minima
+
+# Put all posts under "blog/" and omit the date in the permalink
+collections:
+  posts:
+    permalink: blog//:categories/:title:output_ext
+
+plugins:
+ - jekyll-feed
+ - jekyll-seo-tag
+ - jekyll-asciidoc

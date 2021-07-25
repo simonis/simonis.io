@@ -1,0 +1,36 @@
+---
+#
+# By default, content added below the "---" mark will appear in the home page
+# between the top bar and the list of recent posts.
+# To change the home page layout, edit the _layouts/home.html file.
+# See: https://jekyllrb.com/docs/themes/#overriding-theme-defaults
+#
+layout: home
+#
+# See: https://github.com/asciidoctor/jekyll-asciidoc#showing-the-document-title
+#
+title: This title will be overridden \
+       by the first section title below for Ascidoc files!
+#
+# Required for link syntax (see https://jekyllrb.com/docs/liquid/tags/#links and
+#                               https://github.com/asciidoctor/jekyll-asciidoc/issues/152)
+liquid: true
+---
+
+= Hello world and welcome!
+:page-author: Volker Simonis
+:page-modified_date: {docdate}
+
+If you read these lines, I've finally managed to publish my new blog :) I've created my first (and only) homepage in the last century, more than 20 years ago (on March 24, 1999): http://progdoc.de. At that time CSS (https://en.wikipedia.org/wiki/CSS[initially released in December 1996]) just started to https://en.wikipedia.org/wiki/CSS#Difficulty_with_adoption[become supported] (do you remember https://en.wikipedia.org/wiki/Internet_Explorer_3[Internet Explorer 3] :). So inorder to make my site cross-browser and cross-platform compatible I decided to mostly use HTML tables and manually created bitmaps for the main layout and navigation (see the "http://www.progdoc.de/about.htm[About]" section for more details). This was cumbersome, but on the other hand, altough stylistically toatally outdated, the page is still rendering today on modern devivces and browsers like in the first days.
+
+Since that time I've experimented with numerous Content Managment Systems and site generators (including https://wordpress.com/[WordPress], https://www.joomla.org/[Joomla], https://contao.org/en/news/typolight-becomes-contao.html[TypoLight (now Contao)], https://www.silverstripe.org/[Silverstripe], http://octopress.org/[Octopress], https://gohugo.io/[Hugo], https://jekyllrb.com/[Jekyll],...) but never managed to release my experiments into the wild.
+
+Finally, I've decided to go with Jekyll and Asciidoc (Markdown is fine but somehow to limited for me). In the end, a static site generator like Jekyll is not much different from my initial manual approach :)
+
+Now that this new site is online, I hope the maintenance effort for for keeping it running and up-to-date will be minimal such that I can concentrate on content creation (after all, that's why I've created it). If it will be available for the next twenty+ years like my first homepage, I'll be more than happy :)
+
+If you're interested in the gory details about how this pages are created, take a look at the "link:{% link about.adoc %}[About]" page.
+
+////
+Testing a link:{% post_url 2021-07-15-uncommit %}[link to a post].
+////

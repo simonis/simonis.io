@@ -1,0 +1,83 @@
+- conference: Joker 2018
+  date: 2018-10-12
+  country: Russia
+  city: St. Petersburg
+  conf-url: https://url.to.conference
+  talk-url: https://url.to.talk
+  title: Some talk title
+  slides: http://url.to.slides
+  video: http://url.to.video
+
+- conference: JBreak 2017
+  date: 2017-03-12
+  talk-url: https://url.to.talk
+  title: Some talk title
+  slides: http://url.to.slides
+  video: http://url.to.video
+
+- conference: JPoint 2019
+  date: 2019-04-19
+  conf-url: https://url.to.conference
+  talk-url: https://url.to.talk
+  title: Some talk title
+  slides: http://url.to.slides
+  video: http://url.to.video
+
+- conference: Joker 2019
+  date: 2019-10-22
+  conf-url: https://url.to.conference
+  talk-url: https://url.to.talk
+  title: Some talk title
+  slides: http://url.to.slides
+  video: http://url.to.video
+
+- conference: JavaOne
+  date: 2014-10-01
+  talk-url: "https://web.archive.org/web/20150906011838if_/https://oracleus.activeevents.com/2014/connect/sessionDetail.ww?SESSION_ID=3138"
+  country: USA
+  city: San Francisco
+  title: "Open Heart Surgery: <br/> Analyzing and Debugging the Java HotSpot VM at the OS Level"
+  slides: https://simonis.github.io/JavaOne2014/javaone2014_con3138.html
+
+- conference: JavaOne
+  date: 2013-09-24
+  talk-url: "https://web.archive.org/web/20140824071043if_/https://oracleus.activeevents.com/2013/connect/sessionDetail.ww?SESSION_ID=4132"
+  country: USA
+  city: San Francisco
+  title: "OpenJDK Porting Experiences: <br/> The Good, the Bad, and the Downright Ugly"
+  slides: http://www.progdoc.de/papers/JavaOne2013/JavaOne2013.html
+  co-speaker: Steve Poole
+
+- conference: JavaOne
+  date: 2013-09-25
+  talk-url: "https://web.archive.org/web/20140824064252if_/https://oracleus.activeevents.com/2013/connect/speakerDetail.ww?PERSON_ID=004FC098CE7B387D781A08CC840DA52D"
+  country: USA
+  city: San Francisco
+  title: "HotSpot Internals: <br/> How to Explore and Debug the OpenJDK VM at the OS Level"
+  slides: http://www.progdoc.de/papers/JavaOne2013_HS/javaone2013_hs.html
+  co-speaker: G&ouml;tz Lindenmaier
+
+- conference: JavaOne
+  date: 2012-10-03
+  country: USA
+  city: San Francisco
+  title: "All Power to OpenJDK: <br/> Porting the JDK to PowerPC and AIX"
+  slides: http://www.progdoc.de/papers/JavaOne2012/javaone2012.html
+  co-speaker: Steve Poole
+
+- conference: JavaOne
+  date: 2005-06-29
+  conf-url: https://web.archive.org/web/20050531214454if_/http://java.sun.com/javaone/
+  country: USA
+  city: San Francisco
+  title: "Internationalization with JFC/Swing Look and Feels"
+  slides: http://www.progdoc.de/papers/intSwing/intSwing.html
+
+- conference: FOSDEM
+  date: 2008-02-24
+  country: Belgium
+  city: Brussels
+  talk-url: https://wiki.debian.org/Java/DevJam/2008/Fosdem
+  conf-url: https://archive.fosdem.org/2008/schedule/devroom/freejava.html
+  title: HotSpot development on Linux with NetBeans
+  slides: https://web.archive.org/web/20121231161945if_/http://weblogs.java.net/blog/simonis/archive/2008/01/hotspot_develop.html

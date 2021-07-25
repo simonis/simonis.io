@@ -1,0 +1,4 @@
+[submodule "_themes/minima-simonis"]
+	path = _themes/minima-simonis
+	url = https://github.com/simonis/minima
+	branch = simonis.io

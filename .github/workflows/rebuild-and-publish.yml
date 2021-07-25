@@ -1,0 +1,15 @@
+name: Build and deploy simonis.io to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  github-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: .github/actions/my-jekyll-action
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

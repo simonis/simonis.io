@@ -1,0 +1,12 @@
+name: 'My Jekyll Action'
+description: 'A GitHub Action to build and publish simonis.io to GitHub Pages'
+inputs:
+  github-token:
+    description: 'The GITHUB_TOKEN secret'
+    required: true
+  runs:
+    # Use Docker to run the action
+    using: 'docker'
+    # The Docker image to use or the path to a 'Dockerfile'
+    image: 'Dockerfile'
+
