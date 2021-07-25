@@ -11,8 +11,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+	with:
+	  submodules: recursive
 
-      - name: Hello world action step
+      - name: Build and publish simonis.io
         uses: ./.github/actions/my-jekyll-action/
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

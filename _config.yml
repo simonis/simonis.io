@@ -30,7 +30,7 @@ header_pages:
  - about.adoc
 
 exclude:
- - Dockerfile
+ - Readme.md
 
 # Build settings
 theme: minima

@@ -13,3 +13,9 @@ pwd
 ls -la
 
 git status
+
+bundle exec jekyll build --trace --verbose --destination ./docs/
+
+git status
+
+

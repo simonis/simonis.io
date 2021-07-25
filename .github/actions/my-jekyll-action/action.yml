@@ -9,4 +9,3 @@ runs:
   using: 'docker'
   # The Docker image to use or the path to a 'Dockerfile'
   image: 'Dockerfile'
-
