@@ -14,9 +14,12 @@ ls -la
 
 id
 
+touch xxx.txt
+ls -la xxx.txt
+
 git status
 
-bundle exec jekyll build --trace --verbose --destination ./docs/
+sudo bundle exec jekyll build --trace --verbose --destination ./docs/
 
 git status
 
