@@ -4,9 +4,9 @@ inputs:
   github-token:
     description: 'The GITHUB_TOKEN secret'
     required: true
-  runs:
-    # Use Docker to run the action
-    using: 'docker'
-    # The Docker image to use or the path to a 'Dockerfile'
-    image: 'Dockerfile'
+runs:
+  # Use Docker to run the action
+  using: 'docker'
+  # The Docker image to use or the path to a 'Dockerfile'
+  image: 'Dockerfile'
 
