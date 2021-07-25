@@ -7,4 +7,4 @@ permalink: /about/
 :page-author: Volker Simonis
 :page-modified_date: {docdate}
 
-XXX
+TBD

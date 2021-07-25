@@ -1,35 +1,68 @@
-- conference: Joker 2018
-  date: 2018-10-12
+- conference: JET
+  date: 2016-11-20
+  country: Minsk
+  city: Byelorussia
+  conf-url: https://web.archive.org/web/20161106121918id_/http://jetconf.by/#/
+  title: HotSpot Intrinsics
+  slides: https://simonis.github.io/JBreak2016/jbreak2016.xhtml#/
+  video: https://www.youtube.com/watch?v=7tvmCXmE1oo
+
+- conference: JET
+  date: 2015-09-28
+  country: Minsk
+  city: Byelorussia
+  conf-url: https://web.archive.org/web/20151027012655if_/http://jetconf.by/about
+  talk-url: https://web.archive.org/web/20151027012655if_/http://jetconf.by/about
+  title: How “Final” is Final
+  slides: http://www.progdoc.de/papers/JET2015/jet2015.xhtml
+  video: https://www.youtube.com/watch?v=7ZMgs6GKZU8
+
+- conference: JPoint
+  date: 2015-04-20
   country: Russia
-  city: St. Petersburg
-  conf-url: https://url.to.conference
-  talk-url: https://url.to.talk
-  title: Some talk title
-  slides: http://url.to.slides
-  video: http://url.to.video
+  city: Moscow
+  conf-url: https://2015.jpoint.ru/
+  talk-url: https://2015.jpoint.ru/talks/simonis/
+  title: Packed Objects, Object Layout & Value Types - a Survey
+  slides: http://www.progdoc.de/papers/JPoint2015/jpoint2015.html
+  video: https://www.youtube.com/watch?v=eR0bMK9pRQQ&list=PLVe-2wcL84b-jusYEsY3oN6hLNFP2KTY3&index=7
 
-- conference: JBreak 2017
-  date: 2017-03-12
-  talk-url: https://url.to.talk
-  title: Some talk title
-  slides: http://url.to.slides
-  video: http://url.to.video
+- conference: FOSDEM
+  date: 2014-02-01
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2014/schedule/event/openjdk_powerpc_endgame/
+  conf-url: https://archive.fosdem.org/2014/
+  title: OpenJDK PowerPC/AIX - Port Endgame
+  slides: http://www.progdoc.de/papers/FOSDEM2014/index.html
+  co-speaker: G&ouml;tz Lindenmaier
 
-- conference: JPoint 2019
-  date: 2019-04-19
-  conf-url: https://url.to.conference
-  talk-url: https://url.to.talk
-  title: Some talk title
-  slides: http://url.to.slides
-  video: http://url.to.video
+- conference: FOSDEM
+  date: 2013-02-02
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2013/schedule/event/power_to_the_people/
+  conf-url: https://archive.fosdem.org/2013/
+  title: Power to the People - the OpenJDK PowerPC/AIX Port
+  slides: http://www.progdoc.de/papers/FOSDEM2013/fosdem2013.html
+  co-speaker: Steve Poole &amp; G&ouml;tz Lindenmaier
 
-- conference: Joker 2019
-  date: 2019-10-22
-  conf-url: https://url.to.conference
-  talk-url: https://url.to.talk
-  title: Some talk title
-  slides: http://url.to.slides
-  video: http://url.to.video
+- conference: JAX
+  date: 2012-04-17
+  city: Mainz
+  country: Germany
+  conf-url: http://web.archive.org/web/20120331084316if_/http://jax.de/
+  talk-url: https://web.archive.org/web/20120511124146if_/http://jax.de/2012/sessions/#session-140
+  title: OpenJDK JVM Internals
+  slides: http://www.progdoc.de/papers/Jax2012/jax2012.html
+
+- conference: EclipseCon
+  date: 2011-11-03
+  conf-url: https://events.eclipse.org/2011/europe/
+  city: Ludwigsburg
+  country: Germany
+  title: How to Contribute to the OpenJDK
+  slides: http://www.progdoc.de/papers/EclipseCon2011/EclipseCon2011.html
 
 - conference: JavaOne
   date: 2014-10-01

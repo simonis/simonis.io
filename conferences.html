@@ -17,11 +17,11 @@ permalink: /conferences/
       </ul>
     {%- endif -%}
     {%- assign year = talk-year -%}
-    <h1>{{ talk-year }}</h1>
-    <ul class="post-list">
+    <h1 class="talk-year">{{ talk-year }}</h1>
+    <ul class="conf-list">
   {% endif %}
       <li>
-        <h3 class="post-link">
+        <h3 class="talk-title">
           {%- if talk.talk-url -%}<a href="{{talk.talk-url}}">{%- endif -%}
             {{ talk.title }}
           {%- if talk.talk-url -%}</a>{%- endif -%}
@@ -34,6 +34,9 @@ permalink: /conferences/
           <span>{{ talk.city}}, {{ talk.country }}</span>
           <span> • </span>
           <span>{{ talk.date | date: date_format }}</span>
+          {% if talk.co-speaker %}
+            <span> • </span>  <span>with {{ talk.co-speaker }}</span>
+          {% endif %}
           <span> • </span>
           <span><a href="{{ talk.slides }}">slides</a></span>
           {% if talk.video %}
