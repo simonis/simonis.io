@@ -22,7 +22,6 @@ endif::[]
 
 = The Memory Layout of a 64-bit Linux Process
 :page-author: Volker Simonis
-:page-modified_date: {docdate}
 
 ////
 Build command line:

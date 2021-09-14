@@ -5,6 +5,5 @@ permalink: /about/
 
 = About
 :page-author: Volker Simonis
-:page-modified_date: {docdate}
 
 TBD

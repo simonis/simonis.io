@@ -22,7 +22,6 @@ endif::[]
 
 = Releases unused heap memory back to the OS or pass:[<br/>]How to make sense of all these numbers
 :page-author: Volker Simonis
-:page-modified_date: {docdate}
 
 The JVM has the ability to release unused heap memory back to the operating system. The exact details on how and when this happens depend on the selected garbage collection algorithm and can be controlled by various command line option. This blog explains how exactly releasing of memory works for SerialGC and explores the corresponding options. With the help of the built-in JVM supportability and logging facilities as well as with the help of native OS tools we will verify that the amount of virtual, committed and dirty memory of the JVM process behaves as expected.
 

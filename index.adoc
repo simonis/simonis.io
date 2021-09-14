@@ -19,7 +19,6 @@ liquid: true
 
 = Hello world and welcome!
 :page-author: Volker Simonis
-:page-modified_date: {docdate}
 
 If you read these lines, I've finally managed to publish my new blog :) I've created my first (and only) homepage in the last century, more than 20 years ago (on March 24, 1999): http://progdoc.de. At that time CSS (https://en.wikipedia.org/wiki/CSS[initially released in December 1996]) just started to https://en.wikipedia.org/wiki/CSS#Difficulty_with_adoption[become supported] (do you remember https://en.wikipedia.org/wiki/Internet_Explorer_3[Internet Explorer 3] :). So inorder to make my site cross-browser and cross-platform compatible I decided to mostly use HTML tables and manually created bitmaps for the main layout and navigation (see the "http://www.progdoc.de/about.htm[About]" section for more details). This was cumbersome, but on the other hand, altough stylistically toatally outdated, the page is still rendering today on modern devivces and browsers like in the first days.
 
