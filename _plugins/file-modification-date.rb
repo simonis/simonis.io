@@ -10,8 +10,8 @@ end
 
 =begin
 
-This is a small [Jekyll Hook](http://jekyllrb.com/docs/plugins/hooks/) for getting
-the last modification time of a file based on:
+This is a small [Jekyll Hook](http://jekyllrb.com/docs/plugins/hooks/) for
+getting the last modification time of a file based on:
 https://stackoverflow.com/questions/36758072/how-to-insert-the-last-updated-time-stamp-in-jekyll-page-at-build-time
 
 For `:pages` it looks like if I have to use `:post_init` instead of `:pre_render` as 
@@ -27,7 +27,11 @@ with the help of AsciiDoctor's `docdate` [document attribute](https://docs.ascii
 :page-modified_date: {docdate}
 ```
 
-Unfortunately this doesn't work, because Jekyll-Asciidoc calls `::Asciidoctor.load` in `converter.rb` without passing the `input_mtime` option which contains the last file modification time. Without this option, AsciiDoctor has no chance to get the modification time, because it does not have direct access to the file any more (instead, the file contents are passed as a string).
+Unfortunately this doesn't work, because Jekyll-Asciidoc calls `::Asciidoctor.load`
+in `converter.rb` without passing the `input_mtime` option which contains the last
+file modification time. Without this option, AsciiDoctor has no chance to get the
+modification time, because it does not have direct access to the file any more (instead,
+the file contents are passed as a string).
 
 This could be fixed with the following patch:
 ```
@@ -43,5 +47,10 @@ This could be fixed with the following patch:
            end
            if (layout_attr = resolve_default_layout document, opts[:attributes])
 ```
+
+For this whole system to work in general we have to reset the file modification time
+of all files to the time when they were committed, because after `git clone` all
+file dates will be reset to the current date.
+This is done in `.github/actions/my-jekyll-action/entrypoint.sh`.
 
 =end
