@@ -18,7 +18,10 @@ id
 # to print the last modifiaction time in posts and documents, because they are
 # based on the last file modification date. For more details see the explanation
 # in _plugins/file-modification-date.rb
+for f in `git ls-tree -r --name-only HEAD`; do ls -la $f; done
 for f in `git ls-tree -r --name-only HEAD`; do touch -d `git log -1 --date=short --pretty='format:%ad' $f` $f; done
+touch -d 2000-01-01 index.adoc
+ls -la index.adoc
 
 # Needed because otherwise bundle/Jekyll can't create Gemfile.lock and write to docs/
 chmod go+w .
