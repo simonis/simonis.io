@@ -1,3 +1,13 @@
+- conference: Joker
+  date: 2014-10-20
+  country: St. Petersburg
+  city: Russia
+  conf-url: https://2014.jokerconf.com/
+  talk-url: https://2014.jokerconf.com/#simonis
+  title: "Open Heart Surgery: <br/> Analyzing and Debugging the HotSpot VM at the OS Level"
+  slides: https://simonis.github.io/Joker2014/
+  video: https://youtu.be/JZpEskA_89U
+
 - conference: JET
   date: 2016-11-20
   country: Minsk
