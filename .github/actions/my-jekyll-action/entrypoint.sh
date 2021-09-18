@@ -14,19 +14,19 @@ ls -la
 
 id
 
+# Needed because otherwise bundle/Jekyll can't create Gemfile.lock and write to docs/
+chmod -R go+w .
+ls -la
+
 # Reset all file dates to the last commit date. This is necessary if we want
 # to print the last modifiaction time in posts and documents, because they are
 # based on the last file modification date. For more details see the explanation
 # in _plugins/file-modification-date.rb
 for f in `git ls-tree -r --name-only HEAD`; do ls -la $f; done
 for f in `git ls-tree -r --name-only HEAD`; do touch -d `git log -1 --date=short --pretty='format:%ad' $f` $f; done
+git log -1 --date=short --pretty='format:%ad' _posts/2021-07-15-uncommit.adoc
 touch -d 2000-01-01 index.adoc
 ls -la index.adoc
-
-# Needed because otherwise bundle/Jekyll can't create Gemfile.lock and write to docs/
-chmod go+w .
-chmod -R go+w docs/
-ls -la
 
 git status
 
