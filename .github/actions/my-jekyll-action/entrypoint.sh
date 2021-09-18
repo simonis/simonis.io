@@ -24,7 +24,11 @@ ls -la
 # in _plugins/file-modification-date.rb
 for f in `git ls-tree -r --name-only HEAD`; do ls -la $f; done
 for f in `git ls-tree -r --name-only HEAD`; do touch -d `git log -1 --date=short --pretty='format:%ad' $f` $f; done
-git log -1 --date=short --pretty='format:%ad' _posts/2021-07-15-uncommit.adoc
+
+git --version
+git log --date=short --pretty='format:%ad' _posts/2021-07-15-uncommit.adoc
+git log --date=short --pretty='format:%cd' _posts/2021-07-15-uncommit.adoc
+
 touch -d 2000-01-01 index.adoc
 ls -la index.adoc
 
