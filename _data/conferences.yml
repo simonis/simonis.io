@@ -8,6 +8,36 @@
   slides: https://simonis.github.io/Joker2014/
   video: https://youtu.be/JZpEskA_89U
 
+- conference: Joker
+  date: 2015-10-16
+  country: St. Petersburg
+  city: Russia
+  conf-url: https://2015.jokerconf.com/en/
+  talk-url: https://2015.jokerconf.com/talks/simonis/
+  title: How «final» is final?
+  slides: https://simonis.github.io/Joker2015/
+  video: https://youtu.be/Wt4xsqBy3wI?list=PLVe-2wcL84b8x3krxqsYHwlmfb4kb8A4n
+
+- conference: Joker
+  date: 2016-10-15
+  country: St. Petersburg
+  city: Russia
+  conf-url: https://2016.jokerconf.com/en
+  talk-url: https://2016.jokerconf.com/en/speakers/volker-simonis/
+  title: "HotSpot Internals: Safepoints, NullPointers and StackOverflows"
+  slides: https://simonis.github.io/hotspot_internals/hotspot_internals.xhtml
+  video: https://www.youtube.com/watch?v=ZGy3xW9oQck
+
+- conference: Joker
+  date: 2017-11-04
+  country: St. Petersburg
+  city: Russia
+  conf-url: https://2017.jokerconf.com/en/
+  talk-url: https://2017.jokerconf.com/en/2017/talks/5wyrdrwkjyuswcwacakam4/
+  title: Birth, life and death of a class
+  slides: https://simonis.github.io/BirthLifeAndDeathOfAClass
+  video: https://www.youtube.com/watch?v=aFW5MldjAFo
+
 - conference: JET
   date: 2016-11-20
   country: Minsk
@@ -27,6 +57,219 @@
   slides: http://www.progdoc.de/papers/JET2015/jet2015.xhtml
   video: https://www.youtube.com/watch?v=7ZMgs6GKZU8
 
+- conference: JUG.RU
+  date: 2015-10-14
+  country: Russia
+  city: St. Petersburg
+  conf-url: https://jug.ru/talks/meetups/
+  talk-url: https://jug.ru/2015/10/volker-simonis-sap-jvm-internals/
+  title: SAP JVM Internals
+  slides: https://simonis.github.io/JUG.RU_2015/SAPJVM_Internals_JUG.RU_2015.pdf
+  video: https://www.youtube.com/watch?v=IsERHnGn7Vs
+
+- conference: JUG Stuttgart
+  date: 2018-01-24
+  country: Germany
+  city: Stuttgart
+  conf-url: https://www.jugs.org/veranstaltungen.html
+  talk-url: https://www.jugs.org/va2018/01-24.html
+  title: Das kleine OpenJDK Einmaleins
+  slides: https://simonis.github.io/JUGS2018
+
+- conference: JUG Mannheim
+  date: 2015-03-12
+  country: Germany
+  city: Mannheim
+  conf-url: http://www.majug.de/events/page12/
+  talk-url: http://www.majug.de/2015/03/12/operation-am-offenen-herzen/
+  title: Operation am offenen Herzen - <br/> Analyse der HotSpot Java VM im laufenden Betrieb
+  slides: https://simonis.github.io/MaJUG2015/majug2015.html#(1)
+
+- conference: jPrime
+  date: 2018-05-29
+  country: Bulgaria
+  city: Sofia
+  conf-url: https://web.archive.org/web/20180730153458/https://jprime.io/
+  title: Class Data Sharing in the HotSpot VM
+  slides: https://simonis.github.io/JPrime2018/CDS/cds.xhtml
+  video: https://youtu.be/-u4ZK8hcy44
+
+- conference: jProfessional
+  date: 2019-01-26
+  country: Bulgaria
+  city: Sofia
+  conf-url: https://jug.bg/events/jprofessionals-winter-edition-2019/
+  title: "Birth, Life and Death of a Class"
+  slides: https://simonis.github.io/jProfessionals2019
+
+- conference: JEEConf
+  date: 2015-05-22
+  country: Ukraine
+  city: Kyiv
+  conf-url: https://jeeconf.com/archive/jeeconf-2015/materials/
+  talk-url: https://jeeconf.com/materials/packed-objects-object-layout-and-value-types/
+  title: Packed Objects, Object Layout & Value Types — a Survey
+  slides: http://www.progdoc.de/papers/JPoint2015/jpoint2015.html
+  video: https://youtu.be/JtlwPbIhq-8?list=PLYj3Bx1JM6Y6KJyi0TL3BJLRzgZJ4cWmL
+
+- conference: JEEConf
+  date: 2016-05-20
+  country: Ukraine
+  city: Kyiv
+  conf-url: https://jeeconf.com/archive/jeeconf-2016/materials/
+  talk-url: https://jeeconf.com/program/hotspot-intrinsics/
+  title: HotSpot Intrinsics
+  slides: https://simonis.github.io/JBreak2016/jbreak2016.xhtml
+  video: https://youtu.be/7J0RELNadks
+
+- conference: JEEConf
+  date: 2017-05-26
+  country: Ukraine
+  city: Kyiv
+  conf-url: https://jeeconf.com/archive/jeeconf-2017/materials/
+  talk-url: https://jeeconf.com/program/analyzing-hotspot-crashes/
+  title: Analyzing HotSpot Crashes
+  slides: https://simonis.github.io/AnalyzingHotSpotCrashes/analyzingHotSpotCrashes.xhtml
+  video: https://youtu.be/cW0kqz00YhM
+
+- conference: JEEConf
+  date: 2018-05-18
+  country: Ukraine
+  city: Kyiv
+  conf-url: https://jeeconf.com/archive/jeeconf-2018/conference-materials/
+  talk-url: https://jeeconf.com/program/class-data-sharing-in-the-hotspot-vm/
+  title: Class Data Sharing in the HotSpot VM
+  slides: https://simonis.github.io/JEEConf2018
+  video: https://youtu.be/b8GzWd--RXg
+
+- conference: JEEConf
+  date: 2019-04-26
+  country: Ukraine
+  city: Kyiv
+  conf-url: https://jeeconf.com/archive/jeeconf-2019/materials/
+  talk-url: https://jeeconf.com/program/birth-life-and-death-of-a-class/
+  title: Birth, life and death of a class
+  slides: https://simonis.github.io/JEEConf2019/BirthLifeAndDeathOfAClass/birth_life_death.xhtml
+  video: https://youtu.be/bwsz9Kwpku4
+
+- conference: JBreak
+  date: 2018-03-04
+  country: Russia
+  city: Novosibirsk
+  conf-url: https://2018.jbreak.ru//en/
+  talk-url: https://2018.jbreak.ru/en/talks/76so01njvm2a0eqgagysm/
+  title: Class data sharing in the HotSpot VM
+  slides: https://simonis.github.io/JBreak2018
+  video: https://youtu.be/fqUG1rr-y78
+
+- conference: JBreak
+  date: 2017-04-04
+  country: Russia
+  city: Novosibirsk
+  conf-url: https://2017.jbreak.ru/en/
+  talk-url: https://2017.jbreak.ru/en/talks/analyzing-hotspot-crashes/
+  title: Analyzing HotSpot Crashes
+  slides: https://simonis.github.io/AnalyzingHotSpotCrashes/analyzingHotSpotCrashes.xhtml
+  video: https://www.youtube.com/watch?v=buPX_nj40Tg
+
+- conference: JBreak
+  date: 2016-03-19
+  country: Russia
+  city: Novosibirsk
+  conf-url: https://2016.jbreak.ru/
+  talk-url: https://2016.jbreak.ru//talks/simonis.html
+  title: HotSpot Intrinsics
+  slides: https://simonis.github.io/JBreak2016/jbreak2016.xhtml
+  video: https://www.youtube.com/watch?v=Ku4CMKcPbh0
+
+- conference: JavaZone
+  date: 2016-09-08
+  country: Norway
+  city: Oslo
+  conf-url: https://2016.javazone.no/
+  title: HotSpot Intrinsics
+  slides: http://simonis.github.io/JBreak2016/jbreak2016.xhtml
+  video: https://youtu.be/7J0RELNadks
+
+- conference: JavaZone
+  date: 2018-09-13
+  country: Norway
+  city: Oslo
+  conf-url: https://2018.javazone.no/
+  talk-url: https://2018.javazone.no/program/98074e45-4782-4a92-9ba7-e00d4961e9d9
+  title: HotSpot Intrinsics
+  slides: https://simonis.github.io/JavaZone2018/CDS/cds.xhtml#/
+  video: https://vimeo.com/289644820
+
+- conference: IMWorld
+  date: 2018-10-02
+  country: Romania
+  city: Bucharest
+  conf-url: http://imworld.ro/2018
+  talk-url: http://imworld.ro/2018/java-stage/
+  title: Class Data Sharing in the HotSpot VM
+  slides: https://simonis.github.io/IMWorld2018/CDS/cds.xhtml#/
+
+- conference: HackUndSoehne
+  date: 2017-10-25
+  country: Germany
+  city: Karlsruhe
+  conf-url: https://hackundsoehne.de/
+  talk-url: https://hackundsoehne.de/events/2017-10-25-java-9-ein-%C3%BCber-und-ausblick/
+  title: Java 9, ein &Uuml;ber- und Ausblick
+  slides: https://simonis.github.io/HackUndSoehne/javaHistoryAndFuture.xhtml
+  video: https://simonis.github.io/HackUndSoehne/java9-jcp-talk.pdf
+
+- conference: GeekOut
+  date: 2018-06-08
+  country: Estonia
+  city: Tallinn
+  conf-url: https://2018.geekout.ee/
+  talk-url: https://2018.geekout.ee/volker-simonis/
+  title: HotSpot Intrinsics
+  slides: https://simonis.github.io/GeekOut2018
+  video: https://player.vimeo.com/video/274560648
+
+- conference: GeekOut
+  date: 2017-06-10
+  country: Estonia
+  city: Tallinn
+  conf-url: https://2017.geekout.ee/
+  talk-url: https://2017.geekout.ee/schedule/hotspot-internals-signals-safepoints-and-nullpointers/
+  title: "HotSpot Internals: Signals, Safepoints and NullPointers"
+  slides: https://simonis.github.io/hotspot_internals/hotspot_internals.xhtml
+  video: https://player.vimeo.com/video/221265923
+
+- conference: GeekOut
+  date: 2016-06-10
+  country: Estonia
+  city: Tallinn
+  conf-url: https://2016.geekout.ee/
+  talk-url: https://2016.geekout.ee/schedule/hotspot-debugging-at-the-os-level/
+  title: HotSpot debugging at the OS level
+  slides: https://simonis.github.io/GeekOut2016
+  video: https://player.vimeo.com/video/170745383
+
+- conference: GeeCon
+  date: 2018-05-11
+  country: Krakow
+  city: Poland
+  conf-url: https://2018.geecon.org/
+  talk-url: https://2018.geecon.org/speakers/info.html?id=346
+  title: Class Data Sharing in the HotSpot VM
+  slides: https://simonis.github.io/GeeCON2018/CDS/cds.xhtml
+  video: https://www.youtube.com/watch?v=NhkLHyz_tN8
+
+- conference: GeeCon
+  date: 2017-10-20
+  country: Prague
+  city: Czech Republic
+  conf-url: https://2017.geecon.cz/
+  talk-url: https://2017.geecon.cz/speakers/?id=303
+  title: Analyzing HotSpot Crashes
+  slides: https://simonis.github.io/GeeCON2017/AnalyzingHotSpotCrashes/analyzingHotSpotCrashes.xhtml
+  video: https://www.youtube.com/watch?v=AYvfB4h4urI
+
 - conference: JPoint
   date: 2015-04-20
   country: Russia
@@ -36,6 +279,74 @@
   title: Packed Objects, Object Layout & Value Types - a Survey
   slides: http://www.progdoc.de/papers/JPoint2015/jpoint2015.html
   video: https://www.youtube.com/watch?v=eR0bMK9pRQQ&list=PLVe-2wcL84b-jusYEsY3oN6hLNFP2KTY3&index=7
+
+- conference: JPoint
+  date: 2016-04-22
+  country: Russia
+  city: Moscow
+  conf-url: https://2016.jpoint.ru/en
+  talk-url: https://2016.jpoint.ru/talks/simonis/
+  title: HotSpot Intrinsics
+  slides: https://github.com/simonis/JBreak2016
+  video: https://youtu.be/76gyiCteq-I?list=PLVe-2wcL84b-Waky1nkWVSNHPg6eOQWU9
+
+- conference: JPoint
+  date: 2017-04-07
+  country: Russia
+  city: Moscow
+  conf-url: https://2017.jpoint.ru/en/
+  talk-url: https://2017.jpoint.ru/talks/analyzing-hotspot-crashes-j/
+  title: Analyzing HotSpot Crashes
+  slides: https://simonis.github.io/AnalyzingHotSpotCrashes/analyzingHotSpotCrashes.xhtml
+  video: https://youtu.be/l-4mIfkmJfw
+
+- conference: FOSDEM
+  date: 2019-02-02
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2019/schedule/event/java_jungle/
+  conf-url: https://archive.fosdem.org/2019/
+  title: Rumble in the Java Jungle
+  slides: https://simonis.github.io/FOSDEM2019/RumbleInTheJavaJungle/rumble.xhtml
+  video: https://video.fosdem.org/2019/H.1302/java_jungle.webm
+
+- conference: FOSDEM
+  date: 2018-02-03
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2018/schedule/event/class_data_sharing/
+  conf-url: https://archive.fosdem.org/2018/
+  title: Class Data Sharing <br/> Sharing Economy in the HotSpot VM
+  slides: https://simonis.github.io/FOSDEM2018/cds.xhtml
+  video: https://video.fosdem.org/2018/UD2.208/class_data_sharing.webm
+
+- conference: FOSDEM
+  date: 2017-02-04
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2017/schedule/event/optimizing_error/
+  conf-url: https://archive.fosdem.org/2017/
+  title: Optimizing Errors Away
+  slides: https://simonis.github.io/OptimizingErrorsAway/optimizinErrorsAway.xhtml
+  video: https://video.fosdem.org/2017/H.1302/optimizing_error.vp8.webm
+
+- conference: FOSDEM
+  date: 2016-01-30
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2016/schedule/event/hotspot_testing_api/
+  conf-url: https://archive.fosdem.org/2016/
+  title: The HotSpot Whitebox-Testing API
+  slides: http://www.progdoc.de/papers/FOSDEM2016/fosdem2016.xhtml
+
+- conference: FOSDEM
+  date: 2015-01-31
+  country: Belgium
+  city: Brussels
+  talk-url: https://archive.fosdem.org/2015/schedule/event/packed_objects/
+  conf-url: https://archive.fosdem.org/2015/
+  title: Packed Objects, Object Layout & Value Types - a Survey
+  slides: http://www.progdoc.de/papers/FOSDEM2015/fosdem2015.html
 
 - conference: FOSDEM
   date: 2014-02-01
@@ -73,6 +384,30 @@
   country: Germany
   title: How to Contribute to the OpenJDK
   slides: http://www.progdoc.de/papers/EclipseCon2011/EclipseCon2011.html
+
+- conference: JavaOne
+  date: 2017-10-03
+  conf-url: "https://web.archive.org/web/20170908220741/https://www.oracle.com/javaone/index.html"
+  country: USA
+  city: San Francisco
+  title: "OpenJDK Ins and Outs"
+  slides: https://simonis.github.io/JavaOne2017/OpenJDKInsAndOuts/openjdk.xhtml
+
+- conference: JavaOne
+  date: 2017-10-04
+  conf-url: "https://web.archive.org/web/20170908220741/https://www.oracle.com/javaone/index.html"
+  country: USA
+  city: San Francisco
+  title: "Analyzing HotSpot Crashes"
+  slides: https://simonis.github.io/JavaOne2017/analyzingHotSpotCrashes.xhtml
+
+- conference: JavaOne
+  date: 2016-09-19
+  conf-url: "https://web.archive.org/web/20160910023823/https://www.oracle.com/javaone/index.html"
+  country: USA
+  city: San Francisco
+  title: "Java and OpenJDK in Corporate Environments"
+  slides: https://simonis.github.io/JavaOne2016/openjdk.xhtml
 
 - conference: JavaOne
   date: 2014-10-01
