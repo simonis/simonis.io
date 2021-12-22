@@ -27,6 +27,7 @@ header_pages:
  - blog.adoc
  - conferences.html
  - cv.html
+ - vintage.html
  - about.adoc
 
 exclude:
