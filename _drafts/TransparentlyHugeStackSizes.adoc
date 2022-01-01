@@ -1,0 +1,247 @@
+---
+layout: post
+title: "Transparently Huge Stack Sizes"
+categories: openjdk
+---
+
+:toc:
+:toc-placement!:
+:source-highlighter: rouge
+:icons: font
+:listing-caption: Listing
+:xrefstyle: short
+:docinfo: shared
+:docinfodir: styles/
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Transparently Huge Stack Sizes
+:page-author: Volker Simonis
+
+This was intended as a short post about the interaction of the Linux https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html[Transparent Huge Pages] (THP) feature with various Java thread stack sizes in OpenJDK's HotSpot JVM. However, because the reason for the described behaviour is quite tricky, we will first have to deep-dive into the details of memory allocation and thread stack setup in Linux.
+
+
+
+
+== Linux mmap implementation
+
+=== Tracing Linux kernel events
+
+https://events.static.linuxfound.org/sites/events/files/slides/praesentation_0.pdf
+# echo 1 > /sys/kernel/debug/tracing/events/mmap/enable 
+# echo 1 > /sys/kernel/debug/tracing/tracing_on
+# cat /sys/kernel/debug/tracing/trace_pipe
+
+struct mm_struct {
+  struct {
+    struct vm_area_struct *mmap;    /* list of VMAs */
+    struct rb_root mm_rb;
+    u64 vmacache_seqnum;            /* per-thread vmacache */
+#ifdef CONFIG_MMU
+    unsigned long (*get_unmapped_area) (struct file *filp,
+        unsigned long addr, unsigned long len,
+        unsigned long pgoff, unsigned long flags);
+#endif
+    unsigned long mmap_base;  /* base of mmap area */
+https://elixir.bootlin.com/linux/latest/source/include/linux/mm_types.h#L402
+
+
+legacy_va_layout
+If non-zero, this sysctl disables the new 32-bit mmap layout - the kernel
+will use the legacy (2.4) layout for all processes.
+https://www.kernel.org/doc/Documentation/sysctl/vm.txt
+
+void arch_pick_mmap_layout(struct mm_struct *mm, struct rlimit *rlim_stack)
+{
+  if (mmap_is_legacy())
+    mm->get_unmapped_area = arch_get_unmapped_area;
+  else
+    mm->get_unmapped_area = arch_get_unmapped_area_topdown;
+
+  arch_pick_mmap_base(&mm->mmap_base, &mm->mmap_legacy_base,
+      arch_rnd(mmap64_rnd_bits), task_size_64bit(0),
+      rlim_stack);
+
+arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
+https://elixir.bootlin.com/linux/v5.15.10/source/arch/x86/kernel/sys_x86_64.c#L164
+
+#ifdef CONFIG_HAVE_ARCH_COMPAT_MMAP_BASES
+  /*
+   * The mmap syscall mapping base decision depends solely on the
+   * syscall type (64-bit or compat). This applies for 64bit
+   * applications and 32bit applications. The 64bit syscall uses
+   * mmap_base, the compat syscall uses mmap_compat_base.
+   */
+  arch_pick_mmap_base(&mm->mmap_compat_base, &mm->mmap_compat_legacy_base,
+      arch_rnd(mmap32_rnd_bits), task_size_32bit(),
+      rlim_stack);
+#endif
+}
+https://elixir.bootlin.com/linux/v5.15.10/source/arch/x86/mm/mmap.c#L132
+
+unsigned long do_mmap(..)
+https://elixir.bootlin.com/linux/latest/source/mm/mmap.c#L1404
+
+  /* Obtain the address to map to. we verify (or select) it and ensure
+   * that it represents a valid section of the address space.
+   */
+  addr = get_unmapped_area(file, addr, len, pgoff, flags);
+
+  get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
+  https://elixir.bootlin.com/linux/v5.15.10/source/mm/mmap.c#L2229
+
+  unsigned long mmap_region(..)
+  https://elixir.bootlin.com/linux/v5.15.10/source/mm/mmap.c#L1716
+
+
+https://code.woboq.org/linux/linux/arch/x86/include/asm/processor.h.html#880
+/*
+ * User space process size.  This is the first address outside the user range.
+ * There are a few constraints that determine this:
+ *
+ * On Intel CPUs, if a SYSCALL instruction is at the highest canonical
+ * address, then that syscall will enter the kernel with a
+ * non-canonical return address, and SYSRET will explode dangerously.
+ * We avoid this particular problem by preventing anything executable
+ * from being mapped at the maximum canonical address.
+ *
+ * On AMD CPUs in the Ryzen family, there's a nasty bug in which the
+ * CPUs malfunction if they execute code from the highest canonical page.
+ * They'll speculate right off the end of the canonical space, and
+ * bad things happen.  This is worked around in the same way as the
+ * Intel problem.
+ *
+ * With page table isolation enabled, we map the LDT in ... [stay tuned]
+ */
+#define TASK_SIZE_MAX	((1UL << __VIRTUAL_MASK_SHIFT) - PAGE_SIZE)
+#define DEFAULT_MAP_WINDOW	((1UL << 47) - PAGE_SIZE)
+/* This decides where the kernel will search for a free chunk of vm
+ * space during mmap's.
+ */
+#define IA32_PAGE_OFFSET	((current->personality & ADDR_LIMIT_3GB) ? \
+					0xc0000000 : 0xFFFFe000)
+#define TASK_SIZE_LOW		(test_thread_flag(TIF_ADDR32) ? \
+					IA32_PAGE_OFFSET : DEFAULT_MAP_WINDOW)
+#define TASK_SIZE		(test_thread_flag(TIF_ADDR32) ? \
+					IA32_PAGE_OFFSET : TASK_SIZE_MAX)
+#define TASK_SIZE_OF(child)	((test_tsk_thread_flag(child, TIF_ADDR32)) ? \
+					IA32_PAGE_OFFSET : TASK_SIZE_MAX)
+#define STACK_TOP		TASK_SIZE_LOW
+#define STACK_TOP_MAX		TASK_SIZE_MAX
+
+== stap
+
+For Ubuntu 18.04 with Linux 5.x kernel the default Systemtap version 3.1/0.170 installed by `apt-get` is too old.
+```
+$ sudo apt-get install libelf-dev libdw-dev 
+$ git clone git://sourceware.org/git/systemtap.git
+$ cd systemtap/
+$ git checkout release-4.6
+$ ./configure 
+$ make
+$ sudo make install
+```
+Install kernel debug symbols:
+```
+$ sudo apt-get install -y linux-image-$(uname -r)-dbgsym
+```
+
+```
+# stap -e 'probe kernel.function("mmap_base").call { printf("%s(%d) -> %s(%s)\n", execname(), pid(), probefunc(), $$parms)} probe kernel.function("mmap_base").return { printf("%s(%d) <- %s(%d)\n", execname(), pid(), probefunc(), $return) }'
+
+# stap -e 'probe kernel.function("get_mmap_base").call { printf("%s(%d) -> %s(%s)\n", execname(), pid(), probefunc(), $$parms)} probe kernel.function("get_mmap_base").return { printf("%s(%d) <- %s(%d)\n", execname(), pid(), probefunc(), $return) }'
+
+# stap -e 'probe kernel.function("arch_pick_mmap_layout").call { printf("%s(%d) -> %s(%d)\n%s\n", execname(), pid(), probefunc(), $mm->mmap_base, sprint_backtrace())} probe kernel.function("arch_pick_mmap_layout").return { printf("%s(%d) <- %s(%d)\n", execname(), pid(), probefunc(), @cast(@entry($mm),"mm_struct")->mmap_base) }'
+
+bash(2305) -> arch_pick_mmap_layout(0)
+arch_pick_mmap_layout+0x0 [kernel]
+setup_new_exec+0x6b [kernel]
+load_elf_binary+0x3af [kernel]
+search_binary_handler+0x91 [kernel]
+__do_execve_file.isra.39+0x6f6 [kernel]
+__x64_sys_execve+0x39 [kernel]
+do_syscall_64+0x57 [kernel]
+entry_SYSCALL_64_after_hwframe+0x44 [kernel]
+entry_SYSCALL_64_after_hwframe+0x44 [kernel]
+
+bash(2305) <- setup_new_exec(140737354133504)
+
+# ps -ef | grep 2305
+simonisv  2305  8343  0 22:56 pts/28   00:00:00 ./a.out
+# ps -ef | grep 8343
+simonisv  2305  8343  0 22:56 pts/28   00:00:00 ./a.out
+simonisv  8343  2736  0 Dez28 pts/28   00:00:00 bash
+```
+
+Using the name od sys-calls (e.g. `__do_sys_mprotect`) directly, doesn't seem to work (i.e. "`semantic error: no match (similar functions: __do_sys_mprotect, __se_sys_mprotect, __x64_sys_mprotect, __ia32_sys_mprotect, __do_sys_chroot)`") altough you get this exact symbol when probing for available kernel symbols:
+```
+# stap -l 'kernel.function("*mprotect")'
+kernel.function("__do_sys_mprotect@/build/linux-hwe-5.4-ThuNCY/linux-hwe-5.4-5.4.0/mm/mprotect.c:609")
+kernel.function("__ia32_sys_mprotect@/build/linux-hwe-5.4-ThuNCY/linux-hwe-5.4-5.4.0/mm/mprotect.c:609")
+kernel.function("__x64_sys_mprotect@/build/linux-hwe-5.4-ThuNCY/linux-hwe-5.4-5.4.0/mm/mprotect.c:609")
+...
+```
+Instead, the CPU-specifc version can be used in a probe (e.g. `__x64_sys_mprotect`). However, this version only takes a pointer to a struct (i.e. `__x64_sys_mprotect(const struct pt_regs *regs)`) as argument which is inconvenient to log. So better look up which function is called by `__x64_sys_mprotect()` (e.g. at https://code.woboq.org/linux/linux/arch/x86/include/generated/asm/syscalls_64.h.html[linux/arch/x86/include/generated/asm/syscalls_64.h]) and use that as probe:
+
+```
+#ifdef CONFIG_X86
+__SYSCALL_64(10, __x64_sys_mprotect, )
+```
+
+This expands to:
+```
+SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
+		unsigned long, prot)
+{
+	return do_mprotect_pkey(start, len, prot, -1);
+}
+```
+in https://code.woboq.org/linux/linux/mm/mprotect.c.html#578[linux/mm/mprotect.c]. `do_mprotect_pkey()` is the perfect probe point.
+
+```
+# stap -t -d /tmp/a.out -d /lib/x86_64-linux-gnu/libpthread-2.27.so -d /lib/x86_64-linux-gnu/libc-2.27.so -d /lib/x86_64-linux-gnu/ld-2.27.so -e '
+probe begin {
+  printf("\n\nPROBES INSTALLED\n\n")
+}
+probe kernel.function("ksys_mmap_pgoff").call {
+  if (execname()=="a.out") {
+    printf("\n=============================\n%s(%d:%d) -> %s(%s)\n%s\n%s\n", execname(), pid(), tid(), probefunc(), $$parms, sprint_backtrace(), sprint_ubacktrace())
+  }
+}
+probe kernel.function("__x64_sys_brk").call {
+  if (execname()=="a.out") {
+    printf("\n=============================\n%s(%d:%d) -> %s(%p)\n%s\n%s\n", execname(), pid(), tid(), probefunc(), $regs->di, sprint_backtrace(), sprint_ubacktrace())
+  }
+}
+probe kernel.function("__x64_sys_brk").return {
+  if (execname()=="a.out") {
+    printf(" <- %p - %p (brk)\n",  + @cast(@entry($regs),"pt_regs")->di, $return)
+  }
+}
+probe kernel.function("do_mprotect_pkey").call,
+      kernel.function("__vm_munmap").call {
+  if (execname()=="a.out") {
+    printf("\n=============================\n%s(%d:%d) -> %s(%s)\n%s\n%s\n", execname(), pid(), tid(), probefunc(), $$parms, sprint_backtrace(), sprint_ubacktrace())
+    printf(" <- %p - %p (%s)\n", $start, $start + $len, probefunc()=="do_mprotect_pkey"?"mprotect":"munmap")
+  }
+}
+probe kernel.function("ksys_mmap_pgoff").return {
+  if (execname()=="a.out") {
+    printf(" <- %p - %p (mmap)\n", $return, $return + @entry($len))
+  }
+}' | tee /tmp/stap.out
+```
+
+== Linux pthread implementation
+
+https://sourceware.org/bugzilla/show_bug.cgi?id=22637
+Bug 22637 - guard size is subtracted from thread stack size instead of adding it on top
+Fixed in Version: 2.27
+
+https://chao-tic.github.io/blog/2018/12/25/tls
+A Deep dive into (implicit) Thread Local Storage
