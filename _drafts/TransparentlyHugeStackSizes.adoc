@@ -57,6 +57,36 @@ With `DEFAULT_MAP_WINDOW` being `((1UL << 47) - PAGE_SIZE)` this gives `(0x80000
 
 See http://www.greenend.org.uk/rjk/tech/dataseg.html (and https://unix.stackexchange.com/questions/226283/shared-library-mappings-in-proc-pid-maps[Shared library mappings in /proc/pid/maps], https://unix.stackexchange.com/questions/353676/what-is-the-purpose-of-seemingly-unusable-memory-mappings-in-linux/353685#353685[What is the purpose of seemingly unusable memory mappings in linux?]) for an explanation why for every loaded shared libray there's a 2MB gap with `PROT_NONE` permission between the text and the data segment.
 
+=== Transparent Huge Pages (THP)
+
+The kernel only decides whether to back up a virtual memory region by a physical huge page (e.g. THP) when it is first touched:
+```
+kernel: Call Trace:
+kernel: [<ffffffff81179d8f>] compaction_alloc+0x1cf/0x240
+kernel: [<ffffffff811b15ce>] migrate_pages+0xce/0x610
+kernel: [<ffffffff81179bc0>] ? isolate_freepages_block+0x380/0x380
+kernel: [<ffffffff8117abb9>] compact_zone+0x299/0x400
+kernel: [<ffffffff8117adbc>] compact_zone_order+0x9c/0xf0
+kernel: [<ffffffff8117b171>] try_to_compact_pages+0x121/0x1a0
+kernel: [<ffffffff815ff336>] __alloc_pages_direct_compact+0xac/0x196
+kernel: [<ffffffff81160758>] __alloc_pages_nodemask+0x788/0xb90
+kernel: [<ffffffff810b11c0>] ? task_numa_fault+0x8d0/0xbb0
+kernel: [<ffffffff811a24aa>] alloc_pages_vma+0x9a/0x140
+kernel: [<ffffffff811b674b>] do_huge_pmd_anonymous_page+0x10b/0x410
+kernel: [<ffffffff81182334>] handle_mm_fault+0x184/0xd60
+kernel: [<ffffffff8160f1e6>] __do_page_fault+0x156/0x520
+kernel: [<ffffffff8118a945>] ? change_protection+0x65/0xa0
+kernel: [<ffffffff811a0dbb>] ? change_prot_numa+0x1b/0x40
+kernel: [<ffffffff810adb86>] ? task_numa_work+0x266/0x300
+kernel: [<ffffffff8160f5ca>] do_page_fault+0x1a/0x70
+kernel: [<ffffffff81013b0c>] ? do_notify_resume+0x9c/0xb0
+kernel: [<ffffffff8160b808>] page_fault+0x28/0x30
+```
+
+https://alexandrnikitin.github.io/blog/transparent-hugepages-measuring-the-performance-impact/[Transparent Hugepages: measuring the performance impact]
+
+https://groups.google.com/g/mechanical-sympathy/c/sljzehnCNZU[failing to understand the issues with transparent huge paging]
+
 === Tracing Linux kernel events
 
 https://events.static.linuxfound.org/sites/events/files/slides/praesentation_0.pdf

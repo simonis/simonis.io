@@ -1,3 +1,13 @@
+- conference: EclipseCon
+  date: 2022-10-25
+  conf-url: https://www.eclipsecon.org/2022
+  talk-url: https://www.eclipsecon.org/2022/sessions/fairy-tale-zlibzip-compression-openjdk
+  city: Ludwigsburg
+  country: Germany
+  title: A fairy tale of zlib/zip compression in OpenJDK
+  slides: https://simonis.github.io/EclipseCon2022
+  video: https://www.youtube.com/watch?v=x2cJ08p2l5k
+
 - conference: Joker
   date: 2014-10-20
   country: St. Petersburg
