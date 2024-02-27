@@ -1,5 +1,15 @@
+- conference: Jfocus
+  date: 2024-02-07
+  country: Sweden
+  city: Stockholm
+  talk-url: https://www.jfokus.se/talks/1720
+  conf-url: https://www.jfokus.se/jfokus24
+  title: "Lessons Learned from Upgrading and Modernizing a Massive JVM Codebase at AWS"
+  slides: https://www.jfokus.se/jfokus24-preso/Lessons-Learned-from-Upgrading-and-Modernizing-a-Massive-JVM-Codebase.pdf
+  video: https://youtu.be/7DKQ8OdGfmk?si=jpEj5aCSjINrJUOt
+
 - conference: FOSDEM
-  date: 2023-02-03
+  date: 2024-02-03
   country: Belgium
   city: Brussels
   talk-url: https://fosdem.org/2024/schedule/event/fosdem-2024-3454-zeroing-and-the-semantic-gap-between-host-and-guest/
