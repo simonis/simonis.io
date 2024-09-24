@@ -237,7 +237,7 @@
   city: Oslo
   conf-url: https://2018.javazone.no/
   talk-url: https://2018.javazone.no/program/98074e45-4782-4a92-9ba7-e00d4961e9d9
-  title: HotSpot Intrinsics
+  title: Class Data Sharing in the HotSpot VM
   slides: https://simonis.github.io/JavaZone2018/CDS/cds.xhtml#/
   video: https://vimeo.com/289644820
 
