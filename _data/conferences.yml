@@ -1,10 +1,29 @@
+- conference: JavaLand
+  date: 2024-04-08
+  country: Germany
+  city: Nürburgring
+  talk-url: https://my.doag.org/events/javaland/2024/agenda/#agendaId.3885
+  conf-url: https://my.doag.org/events/javaland/2024/agenda
+  title: "From Java to Native in 80 Cycles"
+  slides: https://simonis.github.io/JavaLand2024
+  video: https://progdoc.de/JavaLand2024/FromJavaToNativeIn80Cycles.mp4
+
+
+- conference: jProfessional
+  date: 2023-04-01
+  country: Bulgaria
+  city: Plovdiv
+  conf-url: https://jug.bg/events/jprofessionals-plovdiv-2023/
+  title: "FireCRaCer: The Best Of Both Worlds"
+  slides: https://simonis.github.io/jProfessionals2023/fireCRaCer_Presentation/fireCRaCer.xhtml
+
 - conference: Jfocus
   date: 2024-02-07
   country: Sweden
   city: Stockholm
   talk-url: https://www.jfokus.se/talks/1720
   conf-url: https://www.jfokus.se/jfokus24
-  title: "Lessons Learned from Upgrading and Modernizing a Massive JVM Codebase at AWS"
+  title: "Lessons Learned from  <br/> Upgrading and Modernizing a Massive JVM Codebase at AWS"
   slides: https://www.jfokus.se/jfokus24-preso/Lessons-Learned-from-Upgrading-and-Modernizing-a-Massive-JVM-Codebase.pdf
   video: https://youtu.be/7DKQ8OdGfmk?si=jpEj5aCSjINrJUOt
 
