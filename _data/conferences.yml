@@ -1,3 +1,13 @@
+- conference: JCON
+  date: 2024-05-16
+  country: Germany
+  city: Köln
+  talk-url: https://2024.europe.jcon.one/schedule
+  conf-url: https://2024.europe.jcon.one/
+  title: "Java 8 to 17+ Upgrade - Lessons Learned and Best Practices"
+  slides: https://progdoc.de/JCON2024/LearningsFromMigrating-JCON2024-final.pdf
+  video: https://www.youtube.com/watch?v=q7x0jyNadG0
+
 - conference: JavaLand
   date: 2024-04-08
   country: Germany
