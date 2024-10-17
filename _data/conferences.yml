@@ -31,7 +31,7 @@
   date: 2024-02-07
   country: Sweden
   city: Stockholm
-  talk-url: https://www.jfokus.se/talks/1720
+  talk-url: https://www.jfokus.se/jfokus24/talks/1720
   conf-url: https://www.jfokus.se/jfokus24
   title: "Lessons Learned from  <br/> Upgrading and Modernizing a Massive JVM Codebase at AWS"
   slides: https://www.jfokus.se/jfokus24-preso/Lessons-Learned-from-Upgrading-and-Modernizing-a-Massive-JVM-Codebase.pdf
