@@ -1,3 +1,15 @@
+- conference: airhacks.fm podcast
+  date: 2025-02-12
+  country: Germany
+  city: online
+  conf-url: https://airhacks.fm
+  title: From Predator Plants to Concordance with Java
+  talk-url: https://airhacks.fm/#episode_338
+  co-speaker: Adam Bien
+  apple: https://itunes.apple.com/us/podcast/airhacks-fm-podcast-with-adam-bien/id1296655154?mt=2&app=podcast
+  google: https://podcasts.google.com/feed/aHR0cHM6Ly9wY3IuYXBwbGUuY29tL2lkMTI5NjY1NTE1NA
+  spotify: https://open.spotify.com/show/6nOTQLa2uZxeyGpMW8eppS
+
 - conference: JCON
   date: 2024-05-16
   country: Germany
@@ -24,8 +36,9 @@
   country: Bulgaria
   city: Plovdiv
   conf-url: https://jug.bg/events/jprofessionals-plovdiv-2023/
-  title: "FireCRaCer: The Best Of Both Worlds"
+  title: "FireCRaCer: The Best Of Both Worlds (extended version)"
   slides: https://simonis.github.io/jProfessionals2023/fireCRaCer_Presentation/fireCRaCer.xhtml
+  video: https://www.youtube.com/watch?v=a5_VkgC9cAQ
 
 - conference: Jfocus
   date: 2024-02-07

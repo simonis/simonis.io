@@ -38,9 +38,20 @@ permalink: /conferences/
             <span> • </span>  <span>with {{ talk.co-speaker }}</span>
           {% endif %}
           <span> • </span>
-          <span><a href="{{ talk.slides }}">slides</a></span>
-          {% if talk.video %}
-           , <span><a href="{{ talk.video }}">video</a></span>
+          {% if talk.slides %}
+            <span><a href="{{ talk.slides }}">slides</a></span>
+            {% if talk.video %}
+              , <span><a href="{{ talk.video }}">video</a></span>
+            {% endif %}
+          {% endif %}
+          {% if talk.apple %}
+            <span><a href="{{ talk.apple }}">Apple Podcasts</a></span>,
+          {% endif %}
+          {% if talk.google %}
+            <span><a href="{{ talk.google }}">Google Podcasts</a></span>,
+          {% endif %}
+          {% if talk.spotify %}
+            <span><a href="{{ talk.spotify }}">Spotify</a></span>
           {% endif %}
         </p>
       </li>
